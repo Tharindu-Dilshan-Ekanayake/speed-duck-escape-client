@@ -147,3 +147,20 @@
 .loading .lbl b {
   margin-left: 6px;
 }
+
+/* Short landscape screens (phones): shrink the title and duck so everything fits. */
+@media (max-height: 460px) {
+  .loading .center {
+    gap: 8px;
+  }
+  .loading .l1 {
+    font-size: clamp(20px, 7vh, 40px);
+  }
+  .loading .l2 {
+    font-size: clamp(28px, 11vh, 60px);
+  }
+  .loading .hero svg {
+    width: 18vh;
+    height: 18vh;
+  }
+}
