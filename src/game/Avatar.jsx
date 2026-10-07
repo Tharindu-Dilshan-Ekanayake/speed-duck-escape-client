@@ -25,6 +25,8 @@ function BloxityAvatar({ equipped, proportions, motionRef, targetHeight = 1.75, 
     const collected = collectRig(character)
     for (const mesh of collected.skinnedMeshes) {
       mesh.material = new MeshStandardMaterial({ color: 0xffffff, metalness: 0, roughness: 0.9 })
+      // Posed limbs move outside the bind-pose bounds: never let a part pop out of view.
+      mesh.frustumCulled = false
     }
     return collected
   }, [character])
@@ -86,9 +88,9 @@ function BloxityAvatar({ equipped, proportions, motionRef, targetHeight = 1.75, 
   }, [assembled, onReady])
 
   const propsRef = useRef(proportions)
-  // Riders sit astride the duck: hips a little wider than normal, the leg pose does the rest.
+  // Riders keep their normal proportions: the legs tuck into the duck's back (see poseRider).
   const base = proportions || DEFAULT_PROPORTIONS
-  propsRef.current = { ...base, legOffsetX: (base.legOffsetX ?? 1) * 1.5 }
+  propsRef.current = base
   useFrame(() => {
     try {
       applyProportions(rig, propsRef.current)

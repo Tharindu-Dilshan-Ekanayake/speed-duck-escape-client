@@ -20,13 +20,22 @@ const TrophySvg = ({ size = 64 }) => (
   </svg>
 )
 
+/** Grey medallion with a red (top) and white (bottom) arrow chasing each other round. */
 const RebirthSvg = ({ size = 56 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100">
-    <circle cx="50" cy="50" r="40" fill="#fff" {...S} />
-    <path d="M50 18a32 32 0 0 1 30 20" fill="none" stroke="#ff3a7a" strokeWidth="12" strokeLinecap="round" />
-    <path d="M50 82a32 32 0 0 1-30-20" fill="none" stroke="#2a7bff" strokeWidth="12" strokeLinecap="round" />
-    <path d="M84 30l-2 16-14-6z" fill="#ff3a7a" />
-    <path d="M16 70l2-16 14 6z" fill="#2a7bff" />
+    <circle cx="50" cy="50" r="42" fill="#8d96a3" stroke="#1a1030" strokeWidth="5" />
+    <circle cx="50" cy="50" r="33" fill="#6c7480" />
+    <g transform="rotate(-25 50 50)">
+      {/* Red arc over the top, arrowhead on the right. */}
+      <path d="M22 50a28 28 0 0 1 52-14" fill="none" stroke="#1a1030" strokeWidth="17" strokeLinecap="round" />
+      <path d="M22 50a28 28 0 0 1 52-14" fill="none" stroke="#e8354a" strokeWidth="10" strokeLinecap="round" />
+      <path d="M86 30l-6 24-20-14z" fill="#e8354a" stroke="#1a1030" strokeWidth="4" strokeLinejoin="round" />
+      {/* White arc under the bottom, arrowhead on the left. */}
+      <path d="M78 50a28 28 0 0 1-52 14" fill="none" stroke="#1a1030" strokeWidth="17" strokeLinecap="round" />
+      <path d="M78 50a28 28 0 0 1-52 14" fill="none" stroke="#ffffff" strokeWidth="10" strokeLinecap="round" />
+      <path d="M14 70l6-24 20 14z" fill="#ffffff" stroke="#1a1030" strokeWidth="4" strokeLinejoin="round" />
+    </g>
+    <path d="M30 28a30 30 0 0 1 20-8" fill="none" stroke="#fff" strokeOpacity="0.45" strokeWidth="4" strokeLinecap="round" />
   </svg>
 )
 

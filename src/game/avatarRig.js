@@ -423,13 +423,14 @@ export function poseRider(rig, motion) {
 
   // Seated in the saddle like a jockey: thighs forward around the duck's body, shins
   // hanging down its sides, feet bobbing with the waddle.
-  const kick = Math.sin(phase) * 0.14 * ratio
-  swing(rig, 'LegL1', -1.15 + kick)
-  swing(rig, 'LegR1', -1.15 - kick)
-  sway(rig, 'LegL1', -0.5)
-  sway(rig, 'LegR1', 0.5)
-  swing(rig, 'LegL2', 1.25 - kick)
-  swing(rig, 'LegR2', 1.25 + kick)
+  // Thighs flat along the back and shins down inside the body (like riding in Fly
+  // Evolve): from outside you see one solid rider, never loose legs.
+  swing(rig, 'LegL1', -1.5)
+  swing(rig, 'LegR1', -1.5)
+  sway(rig, 'LegL1', -0.12)
+  sway(rig, 'LegR1', 0.12)
+  swing(rig, 'LegL2', 1.45)
+  swing(rig, 'LegR2', 1.45)
   // Hands on the handle on the duck's neck; elbows soften with the bounce.
   const grip = -1.05 - bob * 0.05 * ratio
   swing(rig, 'ArmL1', grip)

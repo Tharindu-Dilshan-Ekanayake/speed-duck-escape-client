@@ -32,11 +32,6 @@ function Ticker() {
   }, [gl, scene, camera])
   useFrame(({ clock }) => {
     tickMaterials(clock.elapsedTime)
-    // Re-render the sun's shadow map every other frame: half the shadow cost, no visible lag.
-    if (gl.shadowMap.enabled) {
-      gl.shadowMap.autoUpdate = false
-      if (frames.current % 2 === 0) gl.shadowMap.needsUpdate = true
-    }
     frames.current += 1
     if (frames.current === 8) useGame.setState({ sceneReady: true })
   })

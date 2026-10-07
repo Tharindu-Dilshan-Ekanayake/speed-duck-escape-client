@@ -5,7 +5,6 @@ import { useBloxityStore } from './bloxity/store'
 import GameScene from './game/GameScene'
 import { connect, reconnectWithNewIdentity } from './net/net'
 import { runtime, useGame } from './state/store'
-import DevPanel from './ui/DevPanel'
 import Guide from './ui/Guide'
 import HUD, { invite, PANEL_SHORTCUTS } from './ui/HUD'
 import LoadingScreen from './ui/LoadingScreen'
@@ -110,7 +109,6 @@ function App() {
       <HUD />
       <Guide />
       <Panels />
-      <DevPanel />
       <TouchControls />
       <LoadingScreen />
     </div>

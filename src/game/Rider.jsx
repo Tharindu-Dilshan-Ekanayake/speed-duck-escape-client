@@ -15,8 +15,8 @@ import Duck from './Duck'
 
 /** Height the duck's centre of mass sits at: flips rotate around it, not the feet. */
 const PIVOT = 1.05
-/** Seat (duck space): hips just above the duck's back. */
-const SEAT = [0, 0.68, -0.16]
+/** Seat (duck space): hips sit in the duck's back, so the rider looks planted, not perched. */
+const SEAT = [0, 0.58, -0.2]
 
 const SADDLE = new SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2)
 const RIM = new TorusGeometry(1, 0.1, 8, 28)
@@ -61,14 +61,14 @@ export const Rider = memo(function Rider({ duck, equipped, proportions, motionRe
     // the duck and settle back, and sink in on landings.
     const k = 140
     const c = 13
-    st.swayV += (-k * st.sway - c * st.swayV + -roll * 60) * dt
+    st.swayV += (-k * st.sway - c * st.swayV + -roll * 25) * dt
     st.sway += st.swayV * dt
     const landing = Math.max(0, 1 - mo.landT / 0.25)
     st.bounceV += (-k * st.bounce - c * st.bounceV - landing * 30) * dt
     st.bounce += st.bounceV * dt
     if (seat.current) {
-      seat.current.rotation.z = Math.max(-0.35, Math.min(0.35, st.sway))
-      seat.current.position.y = SEAT[1] + Math.max(-0.12, st.bounce) + (air ? 0.04 : 0)
+      seat.current.rotation.z = Math.max(-0.15, Math.min(0.15, st.sway))
+      seat.current.position.y = SEAT[1] + Math.max(-0.06, st.bounce)
     }
   })
   return (
