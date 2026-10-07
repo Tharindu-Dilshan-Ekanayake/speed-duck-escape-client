@@ -224,6 +224,15 @@ function SettingsPanel() {
       </div>
       <div className="row">
         <div>
+          <div className="ol">A / D Keys</div>
+          <div className="r-sub">Turn the camera as you run, or strafe sideways.</div>
+        </div>
+        <button className={`toggle ${settings.turnKeys ? 'on' : ''}`} onClick={() => toggle('turnKeys')}>
+          {settings.turnKeys ? 'TURN' : 'STRAFE'}
+        </button>
+      </div>
+      <div className="row">
+        <div>
           <div className="ol">Graphics</div>
           <div className="r-sub">Low turns off shadows for slower devices.</div>
         </div>
@@ -239,7 +248,7 @@ function SettingsPanel() {
       </div>
       <div className="row" style={{ flexDirection: 'column', alignItems: 'flex-start', fontSize: 16 }}>
         <div className="ol">Controls</div>
-        <div className="r-sub">WASD / Arrows - move • Space - jump (hold to keep hopping) • Drag - turn camera • Wheel - zoom</div>
+        <div className="r-sub">W / S - run • A / D - turn camera • Space - jump (hold to keep hopping) • Drag - turn camera • Wheel - zoom</div>
         <div className="r-sub">E - buy / equip / spin • R Rebirth • Q Ducks • T Stages • F Free gifts • O Settings • Esc close</div>
       </div>
     </Panel>

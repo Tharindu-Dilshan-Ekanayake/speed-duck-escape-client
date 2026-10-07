@@ -39,15 +39,20 @@ export function installKeyboard() {
   })
 }
 
-/** @returns {{ fwd: number, right: number, jump: boolean }} */
-export function readInput() {
+/**
+ * @param {boolean} turnKeys when true, A / D (and the arrow keys) turn the camera instead of
+ *   strafing; the joystick still strafes.
+ * @returns {{ fwd: number, right: number, turn: number, jump: boolean }}
+ */
+export function readInput(turnKeys = false) {
   const t = runtime.input
+  const sideKeys = (keys.r ? 1 : 0) - (keys.l ? 1 : 0)
   let fwd = (keys.f ? 1 : 0) - (keys.b ? 1 : 0) + (t.touchY || 0)
-  let right = (keys.r ? 1 : 0) - (keys.l ? 1 : 0) + (t.touchX || 0)
+  let right = (turnKeys ? 0 : sideKeys) + (t.touchX || 0)
   const len = Math.hypot(fwd, right)
   if (len > 1) {
     fwd /= len
     right /= len
   }
-  return { fwd, right, jump: keys.jump || !!t.touchJump }
+  return { fwd, right, turn: turnKeys ? sideKeys : 0, jump: keys.jump || !!t.touchJump }
 }

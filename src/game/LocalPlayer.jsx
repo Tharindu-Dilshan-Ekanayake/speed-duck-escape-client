@@ -121,7 +121,8 @@ export function LocalPlayer() {
     const S = reg.stage ? STAGES[reg.stage] : null
 
     // ---- Steering, relative to the camera ----
-    const inp = readInput()
+    const inp = readInput(g.settings.turnKeys)
+    runtime.turn = inp.turn * 2.6 // rad/s the camera swings while A / D is held
     const yaw = runtime.cameraYaw
     const fx = -Math.sin(yaw)
     const fz = -Math.cos(yaw)

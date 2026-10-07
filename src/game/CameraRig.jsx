@@ -83,6 +83,7 @@ export function CameraRig() {
     const me = runtime.me
     if (!me) return
     const dt = Math.min(dtRaw, 0.05)
+    if (runtime.turn) orbit.current.yaw -= runtime.turn * dt
     const { yaw, pitch, dist } = orbit.current
     _target.set(me.x, me.y + LOOK_H, me.z)
     const hz = Math.cos(pitch) * dist

@@ -9,7 +9,7 @@ import { create } from 'zustand'
  */
 
 const SETTINGS_KEY = 'sde-settings'
-const DEFAULT_SETTINGS = { music: true, sfx: true, quality: 'high', popups: true }
+const DEFAULT_SETTINGS = { music: true, sfx: true, quality: 'high', popups: true, turnKeys: true }
 
 function loadSettings() {
   try {
