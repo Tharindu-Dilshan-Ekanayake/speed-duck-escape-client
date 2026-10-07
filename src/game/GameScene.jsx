@@ -8,7 +8,6 @@ import CameraRig from './CameraRig'
 import Ambient from './fx/Ambient'
 import Bursts from './fx/Bursts'
 import Footprints from './fx/Footprints'
-import GuideArrow from './fx/GuideArrow'
 import Popups from './fx/Popups'
 import LocalPlayer from './LocalPlayer'
 import { tickMaterials } from './materials'
@@ -81,7 +80,6 @@ export function GameScene() {
       <Popups />
       <Bursts />
       <Ambient />
-      <GuideArrow />
       <CameraRig />
       <Ticker />
     </Canvas>

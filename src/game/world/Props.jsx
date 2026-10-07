@@ -238,7 +238,7 @@ export function Portal({ x, y, z, ry = 0, title, sub, colors = PORTAL_COLORS, sc
   })
   return (
     <group position={[x, y, z]} rotation={[0, ry, 0]} scale={scale}>
-      <mesh geometry={BOX} material={surfaceMaterial('#27304c', 'smooth')} position={[0, 0.12, 0]} scale={[9.4, 0.24, 3.2]} receiveShadow />
+      <mesh geometry={BOX} material={surfaceMaterial('#27304c', 'smooth')} position={[0, 0.17, 0]} scale={[9.4, 0.3, 3.2]} receiveShadow />
       {[-1, 1].map((side) => (
         <group key={side} position={[side * 4.05, 0, 0]}>
           <mesh geometry={BOX} material={surfaceMaterial('#283754', 'smooth')} position={[0, 3.9, -0.1]} scale={[0.72, 7.6, 0.9]} castShadow />
