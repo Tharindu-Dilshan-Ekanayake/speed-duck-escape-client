@@ -86,7 +86,9 @@ function BloxityAvatar({ equipped, proportions, motionRef, targetHeight = 1.75, 
   }, [assembled, onReady])
 
   const propsRef = useRef(proportions)
-  propsRef.current = proportions || DEFAULT_PROPORTIONS
+  // Riders straddle the duck's neck: push the hips well apart so the legs hang outside its body.
+  const base = proportions || DEFAULT_PROPORTIONS
+  propsRef.current = { ...base, legOffsetX: (base.legOffsetX ?? 1) * 3.4 }
   useFrame(() => {
     try {
       applyProportions(rig, propsRef.current)

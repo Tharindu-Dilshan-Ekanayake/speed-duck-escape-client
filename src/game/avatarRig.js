@@ -399,12 +399,12 @@ export function poseRider(rig, motion) {
   rig.root.position.y = rig.rootRestY
 
   // Straddle the duck: thighs forward and apart, shins hanging down its sides.
-  swing(rig, 'LegL1', -1.25)
-  swing(rig, 'LegR1', -1.25)
-  sway(rig, 'LegL1', -0.5)
-  sway(rig, 'LegR1', 0.5)
-  swing(rig, 'LegL2', 1.35)
-  swing(rig, 'LegR2', 1.35)
+  swing(rig, 'LegL1', -0.55)
+  swing(rig, 'LegR1', -0.55)
+  sway(rig, 'LegL1', -0.3)
+  sway(rig, 'LegR1', 0.3)
+  swing(rig, 'LegL2', 0.45)
+  swing(rig, 'LegR2', 0.45)
 
   if (!grounded) {
     // Cheer on the way up, flap on the way down.
