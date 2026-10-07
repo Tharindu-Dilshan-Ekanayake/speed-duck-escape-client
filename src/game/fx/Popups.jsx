@@ -52,7 +52,7 @@ export function Popups() {
   )
   const next = useRef(0)
 
-  useFrame((_s, dt) => {
+  useFrame(({ camera }, dt) => {
     const show = useGame.getState().settings.popups
     let budget = 3
     while (runtime.popups.length && budget > 0) {
@@ -89,7 +89,9 @@ export function Popups() {
       sp.visible = true
       sp.position.set(s.x + s.vx * s.t, s.y + k * 1.8, s.z + s.vz * s.t)
       const pop = Math.min(1, s.t / 0.12)
-      const sc = 0.95 * (0.6 + 0.4 * pop)
+      // Scale with camera distance so the popup stays a small, constant size on screen.
+      const dist = camera.position.distanceTo(sp.position)
+      const sc = 0.034 * dist * (0.6 + 0.4 * pop)
       sp.scale.set(sc * 2.5, sc, 1)
       s.mat.opacity = k < 0.7 ? 1 : 1 - (k - 0.7) / 0.3
     })
