@@ -17,7 +17,8 @@ export function TouchControls() {
     const dx = e.clientX - origin.current.x
     const dy = e.clientY - origin.current.y
     const len = Math.hypot(dx, dy)
-    const max = 55
+    // Knob travel scales with the joystick (it is smaller on phones in landscape).
+    const max = origin.current.max
     const k = len > max ? max / len : 1
     if (knob.current) knob.current.style.transform = `translate(${dx * k}px, ${dy * k}px)`
     runtime.input.touchX = (dx * k) / max
@@ -37,7 +38,7 @@ export function TouchControls() {
         onPointerDown={(e) => {
           unlockAudio()
           const r = e.currentTarget.getBoundingClientRect()
-          origin.current = { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+          origin.current = { x: r.left + r.width / 2, y: r.top + r.height / 2, max: r.width * 0.38 }
           e.currentTarget.setPointerCapture(e.pointerId)
           move(e)
         }}
