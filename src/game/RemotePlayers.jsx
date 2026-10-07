@@ -1,9 +1,10 @@
 import { useFrame } from '@react-three/fiber'
-import { memo, useMemo, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef } from 'react'
 import { CanvasTexture, LinearFilter, SpriteMaterial, SRGBColorSpace } from 'three'
 
 import { formatNum } from '../shared/gameData'
 import { runtime, useGame } from '../state/store'
+import { footprintPool, FootprintTrail } from './footprints'
 import Rider, { newMotion } from './Rider'
 import { FONT_UI } from './textures'
 
@@ -37,6 +38,8 @@ function tagMaterial(name, level, wins, rebirths) {
 const RemoteRider = memo(function RemoteRider({ sid, player }) {
   const group = useRef()
   const motion = useRef(newMotion())
+  const footTrail = useMemo(() => new FootprintTrail(sid), [sid])
+  useEffect(() => () => footprintPool.clearActor(sid), [sid])
   const prev = useRef({ grounded: true, x: 0, z: 0 })
   const tag = useMemo(() => tagMaterial(player.name, player.level, player.wins, player.rebirths), [player.name, player.level, player.wins, player.rebirths])
 
@@ -65,6 +68,10 @@ const RemoteRider = memo(function RemoteRider({ sid, player }) {
     const mo = motion.current
     const grounded = (r.flags & 2) !== 0
     const tread = (r.flags & 8) !== 0
+    footTrail.step({ x: r.x, y: r.y, z: r.z, yaw: r.yaw, now: performance.now() / 1000,
+      grounded: grounded && !!(r.flags & 1) && !tread && group.current.visible && !far, teleported: far,
+      duck: player.duck || 'rubber', level: player.level || 1,
+    })
     if (!grounded && p.grounded && (r.flags & 4)) mo.jumpT = 0
     if (grounded && !p.grounded) mo.landT = 0
     p.grounded = grounded
@@ -78,7 +85,7 @@ const RemoteRider = memo(function RemoteRider({ sid, player }) {
 
   return (
     <group ref={group}>
-      <Rider duck={player.duck || 'rubber'} equipped={player.avatar} proportions={player.proportions} motionRef={motion} flashKey={sid} />
+      <Rider duck={player.duck || 'rubber'} equipped={player.avatar} proportions={player.proportions} motionRef={motion} />
       <sprite material={tag} position={[0, 3.35, 0]} scale={[2.6, 0.81, 1]} />
     </group>
   )

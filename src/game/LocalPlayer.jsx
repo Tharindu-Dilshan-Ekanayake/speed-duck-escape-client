@@ -8,7 +8,8 @@ import { lobbySpawn, onPad, regionAt, STAGES, treadAt } from '../shared/course'
 import { STEP_DISTANCE, TREADMILL_STEPS, speedStat, treadById, velocityFor } from '../shared/gameData'
 import { xpPerStep } from '../shared/rules'
 import { runtime, useGame, worldTime } from '../state/store'
-import { sinkExpired } from './dynamics'
+import { dynBox, sinkExpired } from './dynamics'
+import { footprintPool, FootprintTrail } from './footprints'
 import { readInput, installKeyboard } from './input'
 import { findPrompt } from './interactions'
 import { buildCollision, createPlayer, placePlayer, stageDyn, stepPlayer } from './physics'
@@ -47,6 +48,7 @@ function resetHazards() {
 export function LocalPlayer() {
   const group = useRef()
   const motion = useRef(newMotion())
+  const footTrail = useMemo(() => new FootprintTrail('me'), [])
   const equipped = useBloxityStore((s) => s.equipped)
   const proportions = useBloxityStore((s) => s.proportions)
   const duck = useGame((s) => s.profile?.duck || 'rubber')
@@ -76,6 +78,7 @@ export function LocalPlayer() {
   })
 
   useEffect(() => installKeyboard(), [])
+  useEffect(() => () => footprintPool.clearActor('me'), [])
   useEffect(() => {
     runtime.interact = () => {
       const pr = useGame.getState().prompt
@@ -101,9 +104,11 @@ export function LocalPlayer() {
     const g = useGame.getState()
     const prof = g.profile
     const mo = motion.current
+    let teleported = false
 
     if (runtime.pendingTeleport) {
       const t = runtime.pendingTeleport
+      teleported = true
       runtime.pendingTeleport = null
       placePlayer(pl, t)
       resetHazards()
@@ -131,6 +136,7 @@ export function LocalPlayer() {
     const speed = velocityFor(speedStat(prof?.level || 1)) * (g.speedPct / 100)
 
     const kill = (cause) => {
+      teleported = true
       play(DEATH_SFX[cause] || 'fall')
       runtime.bursts.push({ kind: 'poof', x: pl.x, y: pl.y + 1, z: pl.z, at: performance.now(), color: DEATH_COLOR[cause] })
       // Falling / getting caught in a stage sends you back to the lobby.
@@ -273,6 +279,14 @@ export function LocalPlayer() {
     if (onTread) s.facing = lerpAngle(s.facing, Math.PI, 1 - Math.pow(0.0001, dt))
     else if (hs > 0.5) s.facing = lerpAngle(s.facing, Math.atan2(pl.vx, pl.vz), 1 - Math.pow(0.00002, dt))
     pl.yaw = s.facing
+    const support = pl.ground?.dyn
+    const supportBox = support ? dynBox(support, T, runtime.hazards.sinks, now) : null
+    footTrail.step({
+      x: pl.x, y: pl.y, z: pl.z, yaw: s.facing, now,
+      grounded: pl.grounded && hs > 0.15 && !onTread && !died && !!prof, teleported,
+      duck, level: prof?.level || 1, support,
+      supportPose: supportBox ? { x: (supportBox.minX + supportBox.maxX) / 2, y: (supportBox.minY + supportBox.maxY) / 2, z: (supportBox.minZ + supportBox.maxZ) / 2 } : null,
+    })
     mo.time += dt
     mo.ratio = onTread ? 1 : Math.min(1, hs / Math.max(4, speed * 0.85))
     mo.grounded = pl.grounded || pl.coyote > 0.08
@@ -305,7 +319,7 @@ export function LocalPlayer() {
 
   return (
     <group ref={group}>
-      <Rider duck={duck} equipped={equipped} proportions={proportions} motionRef={motion} flashKey="me" onReady={onReady} />
+      <Rider duck={duck} equipped={equipped} proportions={proportions} motionRef={motion} onReady={onReady} />
     </group>
   )
 }

@@ -15,11 +15,12 @@ for (const w of [1, 2]) {
   for (const p of L.pedestals) SPOTS.push({ type: 'duck', id: p.id, x: p.x, z: p.z, r: 3, world: w })
   for (const t of L.treads) SPOTS.push({ type: 'tread', id: t.id, x: t.x, z: t.z, r: 4.6, world: w, t })
   SPOTS.push({ type: 'wheel', x: L.wheel.x + 2.5, z: L.wheel.z, r: 7, world: w })
-  SPOTS.push({ type: 'portal', to: L.portal.to, x: L.portal.x, z: L.portal.z - 1.5, r: 4.5, world: w })
+  const facing = L.portal.ry || 0
+  SPOTS.push({ type: 'portal', to: L.portal.to, x: L.portal.x + Math.sin(facing) * 1.3, z: L.portal.z + Math.cos(facing) * 1.3, doorX: L.portal.x, doorZ: L.portal.z, facing, r: 4.5, world: w })
 }
 for (let n = 1; n < STAGES.length; n += 1) {
   for (const pr of STAGES[n].props) {
-    if (pr.type === 'worldGate') SPOTS.push({ type: 'portal', to: 2, x: pr.x, z: pr.z + 1.5, r: 4.5, world: 1 })
+    if (pr.type === 'worldGate') SPOTS.push({ type: 'portal', to: 2, x: pr.x, z: pr.z + 1.3, doorX: pr.x, doorZ: pr.z, facing: 0, r: 4.5, world: 1 })
     if (pr.type === 'teleporter') SPOTS.push({ type: 'home', x: pr.x, z: pr.z, r: 3, world: STAGES[n].world })
   }
 }
@@ -101,7 +102,7 @@ function describe(s, p) {
 export function portalAt(x, z, world) {
   for (const s of SPOTS) {
     if (s.type !== 'portal' || s.world !== world) continue
-    if (Math.hypot(x - s.x, z - (s.z - 0.5)) < 1.4) return s
+    if (Math.hypot(x - (s.doorX + Math.sin(s.facing) * 0.6), z - (s.doorZ + Math.cos(s.facing) * 0.6)) < 1.4) return s
   }
   return null
 }

@@ -58,7 +58,7 @@ const LobbyRegion = memo(function LobbyRegion({ world }) {
   const L = LOBBIES[world]
   const shadows = useGame((s) => s.settings.quality === 'high')
   return (
-    <Region x={WORLD_X[world]} zMin={COURSE_Z - 40} zMax={90} dynamic={<LobbyFeatures world={world} />}>
+    <Region x={WORLD_X[world]} zMin={COURSE_Z - 40} zMax={L.bounds.maxZ + 16} dynamic={<LobbyFeatures world={world} />}>
       <StaticChunk boxes={L.boxes} castShadow={shadows} />
       <Nature rocks={L.rocks} trees={L.trees} flowers={L.flowers} theme={L.theme} />
       <Signs signs={L.signs} />

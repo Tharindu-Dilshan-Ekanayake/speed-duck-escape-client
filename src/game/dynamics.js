@@ -7,6 +7,25 @@
 const TAU = Math.PI * 2
 export const frac = (v) => v - Math.floor(v)
 
+/** Synced repeating lava tide. Renderer and collision read exactly the same height. */
+export function floodState(d, T) {
+  const t = frac(T / d.per + (d.ph || 0)) * d.per
+  const ease = (v) => v * v * (3 - 2 * v)
+  let phase
+  let amount
+  let end
+  if (t < d.riseStart) {
+    phase = 'clear'; amount = 0; end = d.riseStart
+  } else if (t < d.riseEnd) {
+    phase = 'rising'; amount = ease((t - d.riseStart) / (d.riseEnd - d.riseStart)); end = d.riseEnd
+  } else if (t < d.drainStart) {
+    phase = 'flooded'; amount = 1; end = d.drainStart
+  } else {
+    phase = 'draining'; amount = 1 - ease((t - d.drainStart) / (d.per - d.drainStart)); end = d.per
+  }
+  return { y: d.lowY + (d.highY - d.lowY) * amount, phase, seconds: Math.ceil(end - t) }
+}
+
 export function moverOffset(d, T) {
   const s = Math.sin(TAU * (T / d.per + d.ph)) * d.amp
   return d.ax === 0 ? [s, 0, 0] : d.ax === 1 ? [0, s, 0] : [0, 0, s]

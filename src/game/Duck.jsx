@@ -2,15 +2,20 @@ import { useFrame } from '@react-three/fiber'
 import { memo, useMemo, useRef } from 'react'
 import {
   AdditiveBlending,
+  BackSide,
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
   Color,
   ConeGeometry,
   CylinderGeometry,
+  DataTexture,
   ExtrudeGeometry,
   MeshPhysicalMaterial,
   MeshStandardMaterial,
+  MeshToonMaterial,
+  NearestFilter,
+  RedFormat,
   Shape,
   ShaderMaterial,
   SphereGeometry,
@@ -19,22 +24,38 @@ import {
 } from 'three'
 
 import { duckById } from '../shared/gameData'
-import { additiveMaterial, fresnelMaterial } from './materials'
+import { DUCK_BILL, DUCK_BODY, DUCK_NECK, DUCK_TAIL, DUCK_WING } from './duckGeometry'
+import { additiveMaterial } from './materials'
 import { shapeTexture } from './textures'
 
 /**
- * A smooth, cartoon rubber duck. Every duck shares this model; `def.fx` adds the
- * personality: glow shell, particles, hat / crown / halo, wings, horns, aura ring.
+ * Sculpted anime duck: one tapered torso, a slender neck and scalloped feather wings.
+ * Skin identities use colour, accessories and particles.
  *
  * Local frame: facing +z, feet at y = 0, about 1.6 m tall.
  */
 
 const SPHERE = new SphereGeometry(1, 40, 28)
-const LP = new SphereGeometry(1, 14, 10)
 const CYL = new CylinderGeometry(1, 1, 1, 24)
 const CONE = new ConeGeometry(1, 1, 18)
-const TORUS = new TorusGeometry(1, 0.06, 10, 48)
 const HALO = new TorusGeometry(1, 0.09, 12, 40)
+/** Upper lash line of an anime eye: a thick arc over the top of the eye. */
+const LASH = new TorusGeometry(1, 0.16, 8, 24, Math.PI * 0.8)
+const TOON_RAMP = new DataTexture(new Uint8Array([85, 150, 208, 255]), 4, 1, RedFormat)
+TOON_RAMP.minFilter = TOON_RAMP.magFilter = NearestFilter
+TOON_RAMP.needsUpdate = true
+const toon = (color, extra = {}) => new MeshToonMaterial({ color, gradientMap: TOON_RAMP, ...extra })
+
+/** Anime ink line: back faces pushed out along their normals (inverted hull). */
+const outline = (color, thick = 0.022) =>
+  new ShaderMaterial({
+    uniforms: { uColor: { value: new Color(color) }, uThick: { value: thick } },
+    vertexShader: `
+      uniform float uThick;
+      void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position + normalize(normal) * uThick, 1.0); }`,
+    fragmentShader: `uniform vec3 uColor; void main() { gl_FragColor = vec4(uColor, 1.0); }`,
+    side: BackSide,
+  })
 
 const FOOT = (() => {
   const s = new Shape()
@@ -76,34 +97,37 @@ function crackTexture() {
   return crackTex
 }
 
+const IRIS = ['#3b7bff', '#8a4dff', '#2fb86a', '#ff6a9a', '#ff9a1a', '#2ac7d8']
 const matCache = new Map()
 function duckMaterials(def) {
   if (matCache.has(def.id)) return matCache.get(def.id)
   const fx = def.fx || {}
-  const glowColor = fx.glow || fx.rim || new Color(def.body).clone().lerp(new Color('#ffffff'), 0.22).getStyle()
-  const body = new MeshPhysicalMaterial({
+  const bodyOptions = {
     color: new Color(def.body),
-    roughness: fx.gold ? 0.3 : fx.crystal ? 0.15 : 0.75,
-    metalness: fx.gold ? 0.7 : fx.crystal ? 0.2 : 0,
-    clearcoat: fx.crystal ? 0.35 : 0.12,
-    clearcoatRoughness: 0.5,
     emissive: new Color(fx.glow && !fx.gold ? fx.glow : def.body),
-    // A little self-light keeps colours flat and bright, like the original look.
-    emissiveIntensity: fx.ghost ? 0.55 : fx.glow ? 0.28 : 0.22,
+    emissiveIntensity: fx.ghost ? 0.4 : fx.glow ? 0.16 : 0.08,
     transparent: !!(fx.ghost || fx.crystal),
     opacity: fx.ghost ? 0.82 : fx.crystal ? 0.88 : 1,
-    flatShading: true,
-  })
+  }
+  const body = fx.gold || fx.crystal
+    ? new MeshPhysicalMaterial({ ...bodyOptions, roughness: fx.gold ? 0.3 : 0.2, metalness: fx.gold ? 0.65 : 0.15 })
+    : toon(def.body, bodyOptions)
   if (fx.cracks) {
     body.emissiveMap = crackTexture()
     body.emissive = new Color(fx.cracks)
     body.emissiveIntensity = 1.6
   }
   const featherColor = new Color(fx.wings || def.body).lerp(new Color('#ffffff'), 0.13)
+  const ink = new Color(def.body).multiplyScalar(0.28).lerp(new Color('#2a1530'), 0.35)
   const m = {
+    ink: outline(ink, 0.024),
+    inkHead: outline(ink, 0.06),
+    iris: new MeshStandardMaterial({ color: fx.eye || IRIS[def.id.length % IRIS.length], emissive: fx.eye || IRIS[def.id.length % IRIS.length], emissiveIntensity: 0.35, roughness: 0.2 }),
+    lid: new MeshStandardMaterial({ color: '#1a1020', roughness: 0.6 }),
     body,
-    beak: new MeshStandardMaterial({ color: new Color(def.beak), roughness: 0.7, emissive: new Color(def.beak), emissiveIntensity: 0.2, flatShading: true }),
-    feet: new MeshStandardMaterial({ color: new Color('#ff8a1a'), roughness: 0.7, emissive: new Color('#ff8a1a'), emissiveIntensity: 0.18 }),
+    beak: toon(def.beak, { emissive: def.beak, emissiveIntensity: 0.12 }),
+    billSeam: toon(new Color(def.beak).multiplyScalar(0.65)),
+    feet: toon(def.beak, { emissive: def.beak, emissiveIntensity: 0.08 }),
     eye: new MeshStandardMaterial({ color: '#111018', roughness: 0.15 }),
     shine: new MeshStandardMaterial({ color: '#ffffff', emissive: '#ffffff', emissiveIntensity: 0.6 }),
     cheek: new MeshStandardMaterial({ color: '#ff8fb3', transparent: true, opacity: 0.55, roughness: 0.6 }),
@@ -111,25 +135,18 @@ function duckMaterials(def) {
     band: new MeshStandardMaterial({ color: '#d4142e', roughness: 0.5 }),
     gold: new MeshStandardMaterial({ color: '#ffcc1a', roughness: 0.25, metalness: 0.85, emissive: '#ff9a00', emissiveIntensity: 0.2 }),
     horn: new MeshStandardMaterial({ color: fx.horns || '#ff6a00', emissive: fx.horns || '#ff6a00', emissiveIntensity: 0.7 }),
-    wing: new MeshStandardMaterial({
+    wing: toon(fx.wings || def.body, {
       color: new Color(fx.wings || def.body),
       emissive: new Color(fx.wings || def.body),
       emissiveIntensity: fx.wings ? 0.35 : 0.04,
-      roughness: 0.7,
-      flatShading: true,
       transparent: !!fx.ghost,
       opacity: fx.ghost ? 0.8 : 1,
     }),
-    feather: new MeshPhysicalMaterial({
+    feather: toon(featherColor, {
       color: featherColor,
-      roughness: 0.75,
-      flatShading: true,
       transparent: !!fx.ghost,
       opacity: fx.ghost ? 0.8 : 1,
     }),
-    belly: new MeshPhysicalMaterial({ color: new Color(def.body).lerp(new Color('#ffffff'), 0.1), roughness: 0.75, flatShading: true }),
-    glow: fresnelMaterial(glowColor, fx.ghost ? 1.1 : 1.15),
-    aura: additiveMaterial(glowColor, 0.24),
   }
   matCache.set(def.id, m)
   return m
@@ -258,10 +275,10 @@ function DuckParticles({ type, color, scale = 1 }) {
 const IDLE = { time: 0, ratio: 0, grounded: true, vy: 0, jumpT: 9, landT: 9 }
 
 /**
- * @param {{ id: string, motionRef?: object, particles?: boolean, glow?: boolean }} props
+ * @param {{ id: string, motionRef?: object, particles?: boolean }} props
  * motionRef.current: { time, ratio (0..1 run amount), grounded, vy, jumpT, landT }
  */
-export const Duck = memo(function Duck({ id, motionRef, particles = true, glow = true }) {
+export const Duck = memo(function Duck({ id, motionRef, particles = true }) {
   const def = duckById(id)
   const fx = def.fx || {}
   const m = duckMaterials(def)
@@ -272,14 +289,12 @@ export const Duck = memo(function Duck({ id, motionRef, particles = true, glow =
   const footL = useRef()
   const footR = useRef()
   const head = useRef()
-  const ring = useRef()
-  const aura = useRef()
   const bigWings = useRef()
   const eyeL = useRef()
   const eyeR = useRef()
   const tail = useRef()
 
-  useFrame((state, dt) => {
+  useFrame((state) => {
     const mo = motionRef?.current || IDLE
     const t = motionRef ? mo.time : state.clock.elapsedTime
     const ratio = mo.ratio || 0
@@ -302,15 +317,9 @@ export const Duck = memo(function Duck({ id, motionRef, particles = true, glow =
     // Life: blink every few seconds and wag the tail.
     const bt = (state.clock.elapsedTime + id.length * 0.9) % 3.7
     const eyeY = bt > 3.56 ? 0.1 : 1
-    if (eyeL.current) eyeL.current.scale.set(0.085, 0.085 * eyeY, 0.085)
-    if (eyeR.current) eyeR.current.scale.set(0.085, 0.085 * eyeY, 0.085)
-    if (tail.current) tail.current.rotation.z = Math.sin(t * (air ? 18 : 5 + ratio * 8)) * (0.22 + ratio * 0.15)
-    if (ring.current) ring.current.rotation.z += dt * 1.6
-    if (aura.current) {
-      aura.current.rotation.z -= dt * 0.35
-      const pulse = 0.96 + Math.sin(t * 2.4) * 0.045
-      aura.current.scale.set(pulse, pulse, pulse)
-    }
+    if (eyeL.current) eyeL.current.scale.y = eyeY
+    if (eyeR.current) eyeR.current.scale.y = eyeY
+    if (tail.current) tail.current.rotation.y = Math.sin(t * (air ? 12 : 4 + ratio * 6)) * 0.12
     if (bigWings.current) bigWings.current.children.forEach((w, i) => (w.rotation.y = (i ? -1 : 1) * (0.35 + Math.sin(t * (air ? 14 : 3)) * 0.25)))
     // Squash on landing, stretch on take-off.
     if (root.current) {
@@ -325,61 +334,68 @@ export const Duck = memo(function Duck({ id, motionRef, particles = true, glow =
       const hue = (state.clock.elapsedTime * 0.25) % 1
       m.body.color.setHSL(hue, 0.95, 0.55)
       m.body.emissive.setHSL(hue, 1, 0.4)
+      m.wing.color.setHSL(hue, 0.8, 0.58)
+      m.feather.color.setHSL(hue, 0.7, 0.67)
     }
   })
 
   return (
-    <group ref={root} scale={0.8}>
+    <group ref={root}>
       <group ref={body}>
-        {/* Body: tilted so the chest leads, with a tail flick at the back. */}
-        <mesh geometry={LP} material={m.body} position={[0, 1.0, -0.08]} scale={[0.66, 0.56, 0.8]} rotation={[-0.32, 0, 0]} castShadow />
-        <mesh geometry={LP} material={m.body} position={[0, 1.12, 0.3]} scale={[0.5, 0.52, 0.46]} castShadow />
-        <mesh ref={tail} geometry={CONE} material={m.body} position={[0, 1.3, -0.84]} rotation={[-1.15, 0, 0]} scale={[0.26, 0.6, 0.12]} castShadow />
-        <mesh geometry={LP} material={m.belly} position={[0, 1.02, 0.62]} scale={[0.34, 0.34, 0.2]} />
-        {glow && m.glow && <mesh geometry={LP} material={m.glow} position={[0, 1.1, 0.05]} scale={[0.95, 1.15, 1.0]} />}
-        {/* Wings, folded against the sides. */}
-        <group ref={wingL} position={[0.62, 1.12, -0.06]}>
-          <mesh geometry={LP} material={m.wing} position={[0.06, -0.2, 0]} scale={[0.1, 0.34, 0.46]} rotation={[0.3, 0, 0]} castShadow />
-          {[-1, 0, 1].map((i) => (
-            <mesh key={i} geometry={LP} material={m.feather} position={[0.14, -0.4, -0.2 + i * 0.19]} scale={[0.05, 0.12, 0.14]} />
+        <mesh geometry={DUCK_BODY} material={m.body} castShadow />
+        {!fx.ghost && <mesh geometry={DUCK_BODY} material={m.ink} />}
+        <mesh ref={tail} geometry={DUCK_TAIL} material={m.feather} position={[0, 0.99, -0.94]} rotation={[-1.05, 0, 0]} scale={[0.8, 0.9, 1]} castShadow />
+        {/* Feather-shaped folded wings: raised overlapping tips, rather than balls. */}
+        <group ref={wingL} position={[0.56, 0.95, -0.16]}>
+          <mesh geometry={DUCK_WING} material={m.wing} castShadow />
+          {[0, 1, 2].map((i) => (
+            <mesh key={i} geometry={DUCK_WING} material={m.feather} position={[0.052 + i * 0.005, -0.04 - i * 0.035, -0.12 - i * 0.06]} scale={[0.7, 0.32, 0.52]} />
           ))}
         </group>
-        <group ref={wingR} position={[-0.62, 1.12, -0.06]}>
-          <mesh geometry={LP} material={m.wing} position={[-0.06, -0.2, 0]} scale={[0.1, 0.34, 0.46]} rotation={[0.3, 0, 0]} castShadow />
-          {[-1, 0, 1].map((i) => (
-            <mesh key={i} geometry={LP} material={m.feather} position={[-0.14, -0.4, -0.2 + i * 0.19]} scale={[0.05, 0.12, 0.14]} />
+        <group ref={wingR} position={[-0.56, 0.95, -0.16]}>
+          <mesh geometry={DUCK_WING} material={m.wing} castShadow />
+          {[0, 1, 2].map((i) => (
+            <mesh key={i} geometry={DUCK_WING} material={m.feather} position={[-0.052 - i * 0.005, -0.04 - i * 0.035, -0.12 - i * 0.06]} scale={[0.7, 0.32, 0.52]} />
           ))}
         </group>
         {fx.wings && (
-          <group ref={bigWings} position={[0, 1.3, -0.4]}>
+          <group ref={bigWings} position={[0, 1.12, -0.36]}>
             {[1, -1].map((s) => (
               <group key={s} rotation={[0, s * 0.4, 0]}>
-                <mesh geometry={LP} material={m.wing} position={[s * 0.7, 0.4, -0.1]} scale={[0.7, 0.4, 0.08]} rotation={[0, 0, s * 0.45]} />
-                <mesh geometry={LP} material={m.wing} position={[s * 0.48, 0.14, -0.06]} scale={[0.46, 0.26, 0.07]} rotation={[0, 0, s * 0.2]} />
+                <mesh geometry={DUCK_WING} material={m.wing} position={[s * 0.64, 0.32, -0.08]} rotation={[0, s * 1.2, s * 0.45]} scale={[1, 1.2, 1.3]} />
+                <mesh geometry={DUCK_WING} material={m.feather} position={[s * 0.42, 0.10, -0.15]} rotation={[0, s * 1.1, s * 0.2]} scale={[0.8, 0.8, 0.9]} />
               </group>
             ))}
           </group>
         )}
         {/* Neck + head. */}
-        <mesh geometry={LP} material={m.body} position={[0, 1.5, 0.36]} scale={[0.27, 0.42, 0.27]} castShadow />
-        <group ref={head} position={[0, 1.82, 0.46]}>
-          <mesh geometry={LP} material={m.body} scale={0.42} castShadow />
-          {glow && m.glow && <mesh geometry={LP} material={m.glow} scale={0.5} />}
+        <mesh geometry={DUCK_NECK} material={m.body} position={[0, 1.02, 0.44]} rotation={[0.18, 0, 0]} castShadow />
+        {!fx.ghost && <mesh geometry={DUCK_NECK} material={m.ink} position={[0, 1.02, 0.44]} rotation={[0.18, 0, 0]} />}
+        {/* A slightly oversized chibi head. */}
+        <group ref={head} position={[0, 1.7, 0.6]} scale={1.14}>
+          <mesh geometry={SPHERE} material={m.body} scale={[0.35, 0.39, 0.38]} castShadow />
+          {!fx.ghost && <mesh geometry={SPHERE} material={m.inkHead} scale={[0.35, 0.39, 0.38]} />}
           {/* Head tuft + nostrils. */}
-          <mesh geometry={CONE} material={m.body} position={[0.02, 0.43, 0.0]} rotation={[0.55, 0, -0.2]} scale={[0.07, 0.24, 0.07]} />
-          <mesh geometry={CONE} material={m.body} position={[-0.05, 0.42, -0.04]} rotation={[0.8, 0, 0.35]} scale={[0.05, 0.17, 0.05]} />
+          <mesh geometry={DUCK_TAIL} material={m.feather} position={[0, 0.34, -0.035]} rotation={[0.5, 0, -0.1]} scale={[0.23, 0.35, 0.4]} />
           {[1, -1].map((s) => (
-            <mesh key={s} geometry={SPHERE} material={m.black} position={[s * 0.07, 0.0, 0.64]} scale={0.022} />
+            <mesh key={s} geometry={SPHERE} material={m.billSeam} position={[s * 0.085, -0.055, 0.55]} scale={[0.018, 0.009, 0.025]} />
           ))}
           {/* Flat orange bill, upper + lower. */}
-          <mesh geometry={LP} material={m.beak} position={[0, -0.06, 0.42]} scale={[0.26, 0.08, 0.3]} />
-          <mesh geometry={LP} material={m.beak} position={[0, -0.13, 0.38]} scale={[0.21, 0.06, 0.22]} />
+          <mesh geometry={DUCK_BILL} material={m.beak} position={[0, -0.075, 0.29]} castShadow />
+          <mesh geometry={DUCK_BILL} material={m.billSeam} position={[0, -0.12, 0.29]} scale={[0.95, 0.5, 0.95]} />
+          <mesh geometry={DUCK_BILL} material={m.beak} position={[0, -0.145, 0.29]} scale={[0.92, 0.75, 0.9]} />
           {[1, -1].map((s) => (
             <group key={s}>
-              <mesh ref={s === 1 ? eyeL : eyeR} geometry={SPHERE} material={m.eye} position={[s * 0.2, 0.1, 0.33]} scale={0.085} />
-              <mesh geometry={SPHERE} material={m.shine} position={[s * 0.18, 0.14, 0.4]} scale={0.03} />
-              <mesh geometry={SPHERE} material={m.shine} position={[s * 0.225, 0.07, 0.4]} scale={0.016} />
-              <mesh geometry={SPHERE} material={m.cheek} position={[s * 0.3, -0.06, 0.27]} scale={[0.07, 0.05, 0.03]} />
+              {/* Big glossy anime eye: dark oval, coloured iris, two sparkles and a lash line. */}
+              <group ref={s === 1 ? eyeL : eyeR} position={[s * 0.235, 0.075, 0.262]} rotation={[-0.08, s * 0.72, 0]}>
+                <mesh geometry={SPHERE} material={m.eye} scale={[0.092, 0.125, 0.04]} />
+                <mesh geometry={SPHERE} material={m.iris} position={[0, -0.03, 0.012]} scale={[0.07, 0.075, 0.034]} />
+                <mesh geometry={SPHERE} material={m.eye} position={[0, -0.022, 0.03]} scale={[0.036, 0.046, 0.018]} />
+                <mesh geometry={SPHERE} material={m.shine} position={[s * -0.03, 0.045, 0.036]} scale={[0.032, 0.036, 0.012]} />
+                <mesh geometry={SPHERE} material={m.shine} position={[s * 0.03, -0.055, 0.036]} scale={0.014} />
+                <mesh geometry={LASH} material={m.lid} position={[0, -0.004, 0.022]} rotation={[0, 0, Math.PI * 0.1]} scale={[0.098, 0.128, 0.1]} />
+              </group>
+              <mesh geometry={SPHERE} material={m.cheek} position={[s * 0.26, -0.085, 0.23]} rotation={[0, s * 0.8, 0]} scale={[0.07, 0.04, 0.02]} />
             </group>
           ))}
           {fx.hat === 'top' && (
@@ -406,16 +422,11 @@ export const Duck = memo(function Duck({ id, motionRef, particles = true, glow =
         [0.24, footL],
         [-0.24, footR],
       ].map(([x, ref]) => (
-        <group key={x} ref={ref} position={[x, 0.62, 0.08]}>
-          <mesh geometry={CYL} material={m.feet} position={[0, -0.3, 0]} scale={[0.06, 0.62, 0.06]} />
-          <mesh geometry={FOOT} material={m.feet} position={[0, -0.6, -0.04]} scale={1.2} castShadow />
+        <group key={x} ref={ref} position={[x, 0.45, 0.08]}>
+          <mesh geometry={CYL} material={m.feet} position={[0, -0.20, 0]} scale={[0.05, 0.4, 0.05]} />
+          <mesh geometry={FOOT} material={m.feet} position={[0, -0.38, -0.04]} scale={1.15} castShadow />
         </group>
       ))}
-      <group ref={aura} position={[0, 0.08, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <mesh geometry={TORUS} material={m.aura} scale={0.95} />
-        <mesh geometry={TORUS} material={m.aura} scale={1.12} />
-      </group>
-      {fx.ring && <mesh ref={ring} geometry={TORUS} material={additiveMaterial(fx.ring, 0.8)} position={[0, 1.1, 0]} rotation={[Math.PI / 2, 0, 0]} scale={1.15} />}
       {particles && fx.particles && <DuckParticles type={fx.particles} color={fx.pc || '#ffffff'} scale={1.2} />}
     </group>
   )

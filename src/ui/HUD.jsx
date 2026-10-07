@@ -20,7 +20,7 @@ import {
 } from '../shared/gameData'
 import { packAmount } from '../shared/rules'
 import { runtime, serverNow, useGame } from '../state/store'
-import { DuckIcon, Gear, Gift, MapIcon, People, Rebirth, Sneaker, Trophy, WheelIcon } from './icons'
+import { DuckIcon, Gear, Gift, People, Rebirth, Sneaker, Trophy, WheelIcon } from './icons'
 import './hud.css'
 
 /** Re-render on a timer (for countdowns). */
@@ -62,13 +62,11 @@ export function goalFor(p) {
 
 const MENU = [
   { id: 'rebirth', label: 'Rebirth', key: 'R', cls: 'c-reb', Icon: Rebirth },
-  { id: 'ducks', label: 'Ducks', key: 'Q', cls: 'c-duck', Icon: () => <DuckIcon size={56} /> },
-  { id: 'stages', label: 'Stages', key: 'T', cls: 'c-map', Icon: MapIcon },
+  { id: 'gifts', label: 'Free', key: 'F', cls: 'c-gift', Icon: Gift },
   { id: 'settings', label: 'Settings', key: 'O', cls: 'c-set', Icon: Gear },
-  { id: 'invite', label: 'Invite', key: 'I', cls: 'c-inv', Icon: People },
-  { id: 'gifts', label: 'Free!', key: 'F', cls: 'c-gift', Icon: Gift },
 ]
 export { MENU }
+export const PANEL_SHORTCUTS = { ...Object.fromEntries(MENU.map(({ id, key }) => [key, id])), Q: 'ducks', T: 'stages' }
 
 export function invite() {
   const url = 'https://speed-duck-escape.play.bloxity.io'
@@ -88,38 +86,42 @@ function giftReady(session, sessionAt) {
 
 function LeftSide({ profile }) {
   const setPanel = useGame((s) => s.setPanel)
+  const panel = useGame((s) => s.panel)
   const session = useGame((s) => s.session)
   const sessionAt = useGame((s) => s.sessionAt)
   const ready = giftReady(session, sessionAt)
   return (
     <div className="corner tl">
       <div className="wins">
-        <Trophy size={78} />
-        <span className="num gold">{formatNum(profile?.wins || 0)}</span>
+        <Trophy size={52} />
+        <div className="wins-copy">
+          <span className="wins-caption">WINS</span>
+          <span className="num gold">{formatNum(profile?.wins || 0)}</span>
+        </div>
       </div>
-      <div className="side">
+      <nav className="side" aria-label="Game menu">
         {MENU.map((m) => (
           <button
             key={m.id}
-            className={`sbtn ${m.cls}`}
+            type="button"
+            className={`sbtn ${m.cls} ${panel === m.id ? 'active' : ''}`}
+            aria-label={`${m.label} (${m.key})`}
+            aria-keyshortcuts={m.key}
+            aria-pressed={panel === m.id}
+            title={`${m.label} - ${m.key}`}
             onClick={() => {
-              if (m.id === 'invite') {
-                play('click')
-                invite()
-                return
-              }
-              play('open')
+              play(panel === m.id ? 'close' : 'open')
               setPanel(m.id)
             }}
           >
-            <span className="key ol">{m.key}</span>
-            <m.Icon size={54} />
+            <kbd className="shortcut" aria-hidden="true">{m.key}</kbd>
+            <span className="sbtn-icon" aria-hidden="true"><m.Icon size={48} /></span>
             <span className="lbl ol">{m.label}</span>
             {m.id === 'gifts' && ready && <span className="bang ol">!</span>}
             {m.id === 'rebirth' && profile && profile.level >= rebirthLevel(profile.rebirths) && <span className="bang ol">!</span>}
           </button>
         ))}
-      </div>
+      </nav>
     </div>
   )
 }
@@ -158,9 +160,13 @@ function TopRight({ profile, now }) {
         {netText}
       </div>
       <div className="pct">
-        <button onClick={() => useGame.setState({ speedPct: Math.max(10, pct - 10) })}>−</button>
+        <button type="button" disabled={pct <= 10} aria-label="Decrease speed (-)" aria-keyshortcuts="-" title="Decrease speed - keyboard -" onClick={() => useGame.setState({ speedPct: Math.max(10, pct - 10) })}>
+          <kbd className="shortcut" aria-hidden="true">-</kbd><span className="speed-symbol" aria-hidden="true">−</span>
+        </button>
         <div className="v ol">{pct}%</div>
-        <button onClick={() => useGame.setState({ speedPct: Math.min(100, pct + 10) })}>+</button>
+        <button type="button" disabled={pct >= 100} aria-label="Increase speed (+)" aria-keyshortcuts="=" title="Increase speed - keyboard + or =" onClick={() => useGame.setState({ speedPct: Math.min(100, pct + 10) })}>
+          <kbd className="shortcut" aria-hidden="true">+</kbd><span className="speed-symbol" aria-hidden="true">+</span>
+        </button>
       </div>
       <div className="stat ol">Speed: {formatNum(Math.round(speedStat(profile?.level || 1) * (pct / 100)))}</div>
       <div className="spin" style={{ pointerEvents: 'auto', cursor: 'pointer' }} onClick={() => setPanel('wheel')}>
@@ -177,9 +183,9 @@ function TopRight({ profile, now }) {
         const left = (until || 0) - sNow
         return (
           <div key={kind} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <button className={`rbtn ${left > 0 ? 'on' : ''}`} onClick={() => boost(kind)}>
+            <button type="button" className={`rbtn rbtn-${kind} ${left > 0 ? 'on' : ''}`} onClick={() => boost(kind)}>
               <span className="ic">{kind === 'wins' ? <Trophy size={46} /> : <Sneaker size={46} />}</span>
-              <span className="big ol">{label}</span>
+              <span className="boost-label ol">{label}</span>
             </button>
             <div className="price">
               {left > 0 ? (
@@ -217,7 +223,8 @@ function TopCenter({ profile }) {
         {label}: {secs}
       </div>
       <div key={goal} className="goal">
-        {goal}
+        <span className="goal-caption">YOUR NEXT GOAL</span>
+        <span className="goal-text">{goal}</span>
       </div>
       {region.stage > 0 && (
         <div className="race ol" style={{ fontSize: 22, color: '#ffe14a' }}>
@@ -247,16 +254,16 @@ function Bottom({ profile }) {
   return (
     <div className="corner bc">
       {prompt && (
-        <div className={`prompt ${prompt.locked ? 'locked' : ''} ${prompt.done ? 'done' : ''}`} onClick={() => runtime.interact?.()}>
-          <div className="k">{prompt.done ? '✓' : 'E'}</div>
-          <div>
-            <div className="pt ol">{prompt.title}</div>
-            <div className="ps">{prompt.sub}</div>
-          </div>
-        </div>
+        <button type="button" className={`prompt ${prompt.locked ? 'locked' : ''} ${prompt.done ? 'done' : ''}`} disabled={prompt.done} aria-label={`${prompt.title}. ${prompt.sub}`} aria-keyshortcuts={prompt.done ? undefined : 'E'} title={prompt.done ? prompt.title : `${prompt.title} - E`} onClick={() => runtime.interact?.()}>
+          <kbd className="shortcut" aria-hidden="true">{prompt.done ? '✓' : 'E'}</kbd>
+          <span className="prompt-copy">
+            <span className="pt ol">{prompt.title}</span>
+            <span className="ps">{prompt.sub}</span>
+          </span>
+        </button>
       )}
       <div className="lvrow">
-        <div style={{ width: 300 }} />
+        <div className="lv-spacer" aria-hidden="true" />
         <div className="lvbar">
           <div className="fill" style={{ width: `${k * 100}%` }} />
           <div className="walkers" style={{ left: `${Math.max(12, k * 100)}%` }}>
@@ -291,7 +298,8 @@ function Bottom({ profile }) {
           return (
             <button
               key={pk.id}
-              className="pack"
+              type="button"
+              className={`pack pack-${pk.kind}`}
               onClick={() => {
                 play('click')
                 send('pack', { i })

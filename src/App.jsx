@@ -6,7 +6,7 @@ import GameScene from './game/GameScene'
 import { connect, reconnectWithNewIdentity } from './net/net'
 import { runtime, useGame } from './state/store'
 import DevPanel from './ui/DevPanel'
-import HUD, { invite, MENU } from './ui/HUD'
+import HUD, { invite, PANEL_SHORTCUTS } from './ui/HUD'
 import LoadingScreen from './ui/LoadingScreen'
 import Panels from './ui/Panels'
 import TouchControls from './ui/TouchControls'
@@ -32,14 +32,14 @@ function useHotkeys() {
       }
       if (key === '-' || key === '_') useGame.setState({ speedPct: Math.max(10, g.speedPct - 10) })
       if (key === '=' || key === '+') useGame.setState({ speedPct: Math.min(100, g.speedPct + 10) })
-      const m = MENU.find((x) => x.key === key)
-      if (!m) return
-      if (m.id === 'invite') {
+      if (key === 'I') {
         invite()
         return
       }
-      play(g.panel === m.id ? 'close' : 'open')
-      g.setPanel(m.id)
+      const panel = PANEL_SHORTCUTS[key]
+      if (!panel) return
+      play(g.panel === panel ? 'close' : 'open')
+      g.setPanel(panel)
     }
     const onPointer = () => unlockAudio()
     window.addEventListener('keydown', onKey)
@@ -91,7 +91,7 @@ function useFonts() {
     const done = () => setReady(true)
     const fonts = document.fonts
     const load = fonts
-      ? Promise.all(['64px "Lilita One"', '700 32px "Fredoka"', 'italic 900 64px "Montserrat"'].map((f) => fonts.load(f))).then(() => fonts.ready)
+      ? Promise.all(['800 64px "Baloo 2"', '800 32px "Nunito"', '64px "Lilita One"', '700 32px "Fredoka"', 'italic 900 64px "Montserrat"'].map((f) => fonts.load(f))).then(() => fonts.ready)
       : Promise.resolve()
     Promise.race([load, new Promise((r) => setTimeout(r, 3500))]).then(done, done)
   }, [])

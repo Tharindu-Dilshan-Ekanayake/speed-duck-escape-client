@@ -398,13 +398,15 @@ export function poseRider(rig, motion) {
   const { time = 0, ratio = 0, grounded = true, jumpT = 9 } = motion
   rig.root.position.y = rig.rootRestY
 
-  // Straddle the duck: thighs forward and apart, shins hanging down its sides.
-  swing(rig, 'LegL1', -0.55)
-  swing(rig, 'LegR1', -0.55)
-  sway(rig, 'LegL1', -0.3)
-  sway(rig, 'LegR1', 0.3)
-  swing(rig, 'LegL2', 0.45)
-  swing(rig, 'LegR2', 0.45)
+  // Seated astride the duck like a rider: thighs forward along its back and spread
+  // around its body, shins hanging down its sides, feet gently bobbing with the waddle.
+  const kick = grounded ? Math.sin(time * (7 + ratio * 7)) * 0.12 * ratio : 0.2
+  swing(rig, 'LegL1', -1.2 + kick)
+  swing(rig, 'LegR1', -1.2 - kick)
+  sway(rig, 'LegL1', -0.42)
+  sway(rig, 'LegR1', 0.42)
+  swing(rig, 'LegL2', 1.05)
+  swing(rig, 'LegR2', 1.05)
 
   if (!grounded) {
     // Cheer on the way up, flap on the way down.

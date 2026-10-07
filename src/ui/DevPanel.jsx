@@ -11,9 +11,9 @@ export function DevPanel() {
   const dev = useGame((s) => s.dev)
   if (!DEV_TOOLS || !dev) return null
   const go = (n) => send('dev', { action: 'tp', stage: Math.max(0, Math.min(STAGE_COUNT, n)) })
-  const b = { pointerEvents: 'auto', cursor: 'pointer', border: '3px solid #160d2a', borderRadius: 10, color: '#fff', font: '700 22px Fredoka, sans-serif', padding: '6px 14px', background: '#2a7bff' }
+  const b = { pointerEvents: 'auto', cursor: 'pointer', border: '3px solid #160d2a', borderRadius: 10, color: '#fff', font: '700 22px Nunito, sans-serif', padding: '6px 14px', background: '#2a7bff' }
   return (
-    <div style={{ position: 'absolute', right: 12, bottom: 260, zIndex: 35, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', padding: 10, borderRadius: 14, background: 'rgba(10,8,30,0.7)', color: '#fff', fontFamily: 'Fredoka, sans-serif', pointerEvents: 'auto' }}>
+    <div style={{ position: 'absolute', right: 12, bottom: 260, zIndex: 35, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', padding: 10, borderRadius: 14, background: 'rgba(10,8,30,0.7)', color: '#fff', fontFamily: 'var(--font)', pointerEvents: 'auto' }}>
       <div style={{ fontWeight: 700, fontSize: 14, color: '#ffd84a' }}>DEV</div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <button style={b} onClick={() => go(stage - 1)}>◀</button>

@@ -1,5 +1,5 @@
 import { useFrame } from '@react-three/fiber'
-import { memo, useMemo, useRef } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import {
   AdditiveBlending,
   BoxGeometry,
@@ -8,7 +8,11 @@ import {
   MeshBasicMaterial,
   CylinderGeometry,
   DoubleSide,
+  InstancedBufferAttribute,
+  Matrix4,
   MeshStandardMaterial,
+  Shape,
+  ShapeGeometry,
   ShaderMaterial,
   SphereGeometry,
   TorusGeometry,
@@ -228,17 +232,27 @@ export function Portal({ x, y, z, ry = 0, title, sub, colors = PORTAL_COLORS, sc
   })
   return (
     <group position={[x, y, z]} rotation={[0, ry, 0]} scale={scale}>
+      <mesh geometry={BOX} material={surfaceMaterial('#27304c', 'smooth')} position={[0, 0.12, 0]} scale={[9.4, 0.24, 3.2]} receiveShadow />
+      {[-1, 1].map((side) => (
+        <group key={side} position={[side * 4.05, 0, 0]}>
+          <mesh geometry={BOX} material={surfaceMaterial('#283754', 'smooth')} position={[0, 3.9, -0.1]} scale={[0.72, 7.6, 0.9]} castShadow />
+          <mesh geometry={BOX} material={goldMat} position={[0, 0.34, 0]} scale={[1.15, 0.38, 1.3]} />
+          <mesh geometry={BOX} material={goldMat} position={[0, 7.75, 0]} scale={[1.15, 0.38, 1.3]} />
+          <mesh geometry={BOX} material={additiveMaterial(ca, 0.8)} position={[0, 3.9, 0.38]} scale={[0.12, 6.7, 0.06]} />
+        </group>
+      ))}
+      <mesh geometry={BOX} material={surfaceMaterial('#283754', 'smooth')} position={[0, 8.1, -0.1]} scale={[9.1, 0.6, 1]} castShadow />
       <mesh geometry={TORUS} material={additiveMaterial(ca, 0.95)} position={[0, 4.2, 0]} scale={3.6} />
-      <mesh geometry={TORUS} material={surfaceMaterial('#1b2140', 'smooth')} position={[0, 4.2, -0.05]} scale={[3.9, 3.9, 2]} />
-      <mesh geometry={DISC} material={mat} position={[0, 4.2, 0]} rotation={[Math.PI / 2, 0, 0]} scale={3.5} />
+      <mesh geometry={TORUS} material={surfaceMaterial('#1b2140', 'smooth')} position={[0, 4.2, -0.75]} scale={[3.95, 3.95, 1.6]} />
+      <mesh geometry={DISC} material={mat} position={[0, 4.2, 0]} rotation={[Math.PI / 2, 0, 0]} scale={[3.45, 1, 3.45]} />
       <Spin speed={0.6} axis="z" position={[0, 4.2, 0.1]}>
         {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => {
           const a = (i / 8) * Math.PI * 2
           return <mesh key={i} geometry={BOX} material={additiveMaterial('#ffffff', 0.85)} position={[Math.cos(a) * 3.6, Math.sin(a) * 3.6, 0]} rotation={[0, 0, a]} scale={[0.15, 0.6, 0.15]} />
         })}
       </Spin>
-      {title && <Label text={title} style="stage" height={1.6} position={[0, 4.6, 0.2]} px={140} />}
-      {sub && <Label text={sub} style="red" height={0.7} position={[0, 2.6, 0.2]} />}
+      {title && <Label text={title} style="stage" height={1.3} position={[0, 9.2, 0.2]} px={140} />}
+      {sub && <Label text={sub} style="gold" height={0.58} position={[0, 7.7, 0.48]} />}
       <pointLight color={ca} intensity={35} distance={16} position={[0, 4, 2]} />
     </group>
   )
@@ -315,9 +329,11 @@ function WelcomeArch({ p }) {
           <mesh geometry={BOX} material={goldMat} position={[0, 9.3, 0]} scale={[2.1, 0.6, 2.1]} />
         </group>
       ))}
+      {/* Bands are thinner than their spacing (and staggered in depth) so neighbours never
+          intersect - overlapping tubes z-fight along their seams. */}
       {RAINBOW.map((c, i) => (
-        <mesh key={c} position={[0, 9.4, 0]}>
-          <torusGeometry args={[5.1 - i * 0.34, 0.2, 8, 48, Math.PI]} />
+        <mesh key={c} position={[0, 9.4, (i % 2) * 0.06]}>
+          <torusGeometry args={[5.1 - i * 0.34, 0.16, 8, 48, Math.PI]} />
           <meshBasicMaterial color={c} toneMapped={false} />
         </mesh>
       ))}
@@ -368,6 +384,72 @@ function Pond({ p }) {
   )
 }
 
+/* ---- Floor arrows: chevrons that pulse in the direction to go ---------------- */
+
+const CHEVRON = (() => {
+  const s = new Shape()
+  s.moveTo(0, 0.42)
+  s.lineTo(0.5, -0.08)
+  s.lineTo(0.5, -0.42)
+  s.lineTo(0, 0.08)
+  s.lineTo(-0.5, -0.42)
+  s.lineTo(-0.5, -0.08)
+  s.closePath()
+  const g = new ShapeGeometry(s)
+  g.rotateX(-Math.PI / 2) // shape +y -> world -z
+  return g
+})()
+
+function arrowMaterial(color) {
+  return new ShaderMaterial({
+    uniforms: { uTime: { value: 0 }, uColor: { value: new Color(color) } },
+    vertexShader: `
+      attribute float aIdx; varying float vIdx;
+      void main() { vIdx = aIdx; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `
+      uniform float uTime; uniform vec3 uColor; varying float vIdx;
+      void main() {
+        float wave = fract(uTime * 0.7 - vIdx * 0.11);
+        float k = 0.35 + 0.65 * pow(1.0 - wave, 3.0);
+        gl_FragColor = vec4(uColor * (0.55 + k * 0.9), 0.45 + k * 0.5);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -4,
+    toneMapped: false,
+  })
+}
+
+const _m = new Matrix4()
+const _r = new Matrix4()
+function FloorArrows({ p }) {
+  const { geo, mat, mats } = useMemo(() => {
+    const [x0, z0] = p.from
+    const [x1, z1] = p.to
+    const n = Math.max(1, Math.floor(Math.hypot(x1 - x0, z1 - z0) / p.gap))
+    const ang = Math.atan2(-(x1 - x0), -(z1 - z0))
+    const g = CHEVRON.clone()
+    g.setAttribute('aIdx', new InstancedBufferAttribute(Float32Array.from({ length: n }, (_, i) => i), 1))
+    const list = Array.from({ length: n }, (_, i) => {
+      const t = (i + 0.5) / n
+      return _m.makeScale(p.w, 1, p.w * 0.8).premultiply(_r.makeRotationY(ang)).setPosition(x0 + (x1 - x0) * t, p.y, z0 + (z1 - z0) * t).clone()
+    })
+    return { geo: g, mat: arrowMaterial(p.color), mats: list }
+  }, [p])
+  const ref = useRef()
+  useLayoutEffect(() => {
+    mats.forEach((m, i) => ref.current.setMatrixAt(i, m))
+    ref.current.instanceMatrix.needsUpdate = true
+  }, [mats])
+  useEffect(() => () => geo.dispose(), [geo])
+  useFrame(({ clock }) => {
+    mat.uniforms.uTime.value = clock.elapsedTime
+  })
+  return <instancedMesh ref={ref} args={[geo, mat, mats.length]} frustumCulled={false} renderOrder={3} />
+}
+
 export const Props = memo(function Props({ props }) {
   return props.map((p, i) => {
     switch (p.type) {
@@ -399,6 +481,8 @@ export const Props = memo(function Props({ props }) {
         return <Portal key={i} x={p.x} y={p.y} z={p.z} title="World 2" sub="Needs 3 Rebirths" />
       case 'teleporter':
         return <Teleporter key={i} p={p} />
+      case 'arrows':
+        return <FloorArrows key={i} p={p} />
       default:
         return null
     }

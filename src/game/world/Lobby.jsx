@@ -57,7 +57,6 @@ const Pedestal = memo(function Pedestal({ ped, owned, equipped, affordable, rebi
       </group>
       <Label text={top} style={style} height={0.6} position={[0, 4.45, 0]} billboard />
       <Label text={`+${formatNum(d.perStep)} / Step`} style="label" height={0.58} position={[0, 3.6, 0]} billboard />
-      {equipped && <mesh geometry={TORUS} material={additiveMaterial('#36ff4a', 0.8)} position={[0, 0.05, 0]} rotation={[Math.PI / 2, 0, 0]} scale={1.5} />}
     </group>
   )
 })

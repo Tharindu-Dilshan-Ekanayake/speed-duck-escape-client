@@ -7,6 +7,7 @@ import { useGame } from '../state/store'
 import CameraRig from './CameraRig'
 import Ambient from './fx/Ambient'
 import Bursts from './fx/Bursts'
+import Footprints from './fx/Footprints'
 import Popups from './fx/Popups'
 import LocalPlayer from './LocalPlayer'
 import { tickMaterials } from './materials'
@@ -74,6 +75,7 @@ export function GameScene() {
       <World />
       <LocalPlayer />
       <RemotePlayers />
+      <Footprints />
       <Popups />
       <Bursts />
       <Ambient />

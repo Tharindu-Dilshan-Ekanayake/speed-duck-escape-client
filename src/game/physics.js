@@ -1,5 +1,5 @@
 import { LOBBIES, STAGES } from '../shared/course'
-import { boulderState, dynBox, METEOR_HIT, meteorPhase, moverOffset, pendAngle, pendHead, sweepAngle, windActive } from './dynamics'
+import { boulderState, dynBox, floodState, METEOR_HIT, meteorPhase, moverOffset, pendAngle, pendHead, sweepAngle, windActive } from './dynamics'
 
 /**
  * Kinematic character controller against axis-aligned boxes and vertical cylinders.
@@ -418,7 +418,12 @@ export function stepPlayer(pl, ctl, dt, env) {
   }
   const midY = pl.y + H / 2
   for (const d of env.dyn) {
-    if (d.t === 'sweep') {
+    if (d.t === 'flood') {
+      if (Math.abs(pl.x - d.x) <= d.w / 2 + R && Math.abs(pl.z - d.z) <= d.d / 2 + R && pl.y < floodState(d, env.T).y - 0.025) {
+        events.push({ type: 'kill', cause: 'burn' })
+        return events
+      }
+    } else if (d.t === 'sweep') {
       if (pl.y > d.y + d.r || pl.y + H < d.y - d.r) continue
       const a = sweepAngle(d, env.T)
       const ux = Math.cos(a)

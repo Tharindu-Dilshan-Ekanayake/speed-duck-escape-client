@@ -36,12 +36,17 @@ function Panel({ title, children, width }) {
       <div className="panel" style={width ? { width } : undefined}>
         <h2 className="ol">{title}</h2>
         <button
+          type="button"
           className="close"
+          aria-label="Close panel (Esc)"
+          aria-keyshortcuts="Escape"
+          title="Close - Esc"
           onClick={() => {
             play('close')
             close()
           }}
         >
+          <kbd className="shortcut wide" aria-hidden="true">ESC</kbd>
           <CloseX />
         </button>
         <div className="body">{children}</div>

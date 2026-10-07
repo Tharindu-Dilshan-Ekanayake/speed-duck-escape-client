@@ -11,6 +11,9 @@ let reverb = null
 let sfxOn = true
 let musicOn = true
 let musicTimer = null
+let musicHall = null
+const MUSIC_VOL = 0.085
+const SFX_VOL = 0.8
 
 function impulse(c, seconds = 1.6, decay = 3) {
   const len = Math.floor(c.sampleRate * seconds)
@@ -35,10 +38,10 @@ function ensure() {
   master.connect(comp)
   comp.connect(ctx.destination)
   sfxBus = ctx.createGain()
-  sfxBus.gain.value = sfxOn ? 1 : 0
+  sfxBus.gain.value = sfxOn ? SFX_VOL : 0
   sfxBus.connect(master)
   musicBus = ctx.createGain()
-  musicBus.gain.value = musicOn ? 0.16 : 0
+  musicBus.gain.value = musicOn ? MUSIC_VOL : 0
   musicBus.connect(master)
   reverb = ctx.createConvolver()
   reverb.buffer = impulse(ctx)
@@ -46,6 +49,14 @@ function ensure() {
   wet.gain.value = 0.22
   reverb.connect(wet)
   wet.connect(master)
+  // The music sits in a big soft hall (sent after musicBus, so muting music mutes it too).
+  musicHall = ctx.createConvolver()
+  musicHall.buffer = impulse(ctx, 3.2, 2.2)
+  const hallSend = ctx.createGain()
+  hallSend.gain.value = 0.9
+  musicBus.connect(hallSend)
+  hallSend.connect(musicHall)
+  musicHall.connect(master)
   startMusic()
   return ctx
 }
@@ -57,11 +68,11 @@ export function unlockAudio() {
 
 export function setSfx(on) {
   sfxOn = on
-  if (sfxBus) sfxBus.gain.setTargetAtTime(on ? 1 : 0, ctx.currentTime, 0.05)
+  if (sfxBus) sfxBus.gain.setTargetAtTime(on ? SFX_VOL : 0, ctx.currentTime, 0.05)
 }
 export function setMusic(on) {
   musicOn = on
-  if (musicBus) musicBus.gain.setTargetAtTime(on ? 0.16 : 0, ctx.currentTime, 0.2)
+  if (musicBus) musicBus.gain.setTargetAtTime(on ? MUSIC_VOL : 0, ctx.currentTime, 0.2)
 }
 
 /* ------------------------------------------------------------------ */
@@ -165,13 +176,16 @@ const SOUNDS = {
     tone(880, { dur: 0.07, type: 'triangle', vol: 0.14, wet: 0.1 })
     tone(590, { dur: 0.09, type: 'triangle', vol: 0.14, at: 0.05, wet: 0.1 })
   },
+  // A soft webbed-foot "pat": a muffled thump plus a tiny wet slap, alternating feet.
   step: () => {
     stepFlip = !stepFlip
-    tone(stepFlip ? 560 : 500, { dur: 0.07, type: 'triangle', vol: 0.05, slide: -120, wet: 0 })
+    tone(stepFlip ? 190 : 165, { dur: 0.07, type: 'sine', vol: 0.09, slide: -70, wet: 0 })
+    noise({ dur: 0.045, vol: 0.05, type: 'bandpass', freq: stepFlip ? 1300 : 1100, q: 1.4 })
   },
+  // The duck quacks every time it jumps.
   jump: () => {
-    tone(320, { dur: 0.18, type: 'sine', vol: 0.2, slide: 520, wet: 0.15 })
-    tone(640, { dur: 0.12, type: 'triangle', vol: 0.06, slide: 700, at: 0.02, wet: 0.1 })
+    quack(0, 1.04 + Math.random() * 0.1, 0.2)
+    noise({ dur: 0.22, vol: 0.05, type: 'bandpass', freq: 500, endFreq: 1800, q: 1.2 })
   },
   land: () => {
     tone(150, { dur: 0.12, type: 'sine', vol: 0.18, slide: -70, wet: 0 })
@@ -217,17 +231,29 @@ const SOUNDS = {
     noise({ dur: 0.9, vol: 0.14, type: 'bandpass', freq: 300, endFreq: 3000, q: 2 })
     chord([523, 784, 1047], { dur: 0.8, type: 'sine', vol: 0.08, at: 0.3, spread: 0.08 })
   },
+  // Falling into water: a big "ker-sploosh", a gulp, then bubbles rising.
   splash: () => {
-    noise({ dur: 0.6, vol: 0.22, type: 'bandpass', freq: 1800, endFreq: 400, q: 1 })
-    for (let i = 0; i < 4; i += 1) tone(500 + Math.random() * 400, { dur: 0.08, vol: 0.06, slide: 500, at: 0.15 + i * 0.07 })
+    tone(520, { dur: 0.22, type: 'sine', vol: 0.22, slide: -400, wet: 0.2 })
+    noise({ dur: 0.9, vol: 0.32, type: 'bandpass', freq: 2200, endFreq: 260, q: 0.8 })
+    noise({ dur: 0.5, vol: 0.18, type: 'lowpass', freq: 700, endFreq: 120 })
+    for (let i = 0; i < 9; i += 1) {
+      const f = 380 + Math.random() * 520
+      tone(f, { dur: 0.06 + Math.random() * 0.05, type: 'sine', vol: 0.07, slide: f * 0.9, at: 0.28 + i * 0.075 + Math.random() * 0.04, wet: 0.25 })
+    }
+    quack(0.12, 0.82, 0.12)
   },
   zap: () => {
     tone(1400, { dur: 0.3, type: 'sawtooth', vol: 0.09, slide: -1250, wet: 0.1 })
     noise({ dur: 0.25, vol: 0.08, type: 'highpass', freq: 3000 })
   },
+  // Falling into lava: a hot hiss with crackles and a startled quack.
   burn: () => {
-    noise({ dur: 0.6, vol: 0.18, type: 'lowpass', freq: 2500, endFreq: 300 })
-    tone(300, { dur: 0.4, type: 'sawtooth', vol: 0.05, slide: -200 })
+    noise({ dur: 1.3, vol: 0.2, type: 'highpass', freq: 3200 })
+    noise({ dur: 0.9, vol: 0.16, type: 'bandpass', freq: 5200, endFreq: 1800, q: 0.9 })
+    noise({ dur: 0.35, vol: 0.14, type: 'lowpass', freq: 600, endFreq: 150 })
+    for (let i = 0; i < 14; i += 1) noise({ dur: 0.018, vol: 0.2 + Math.random() * 0.15, at: 0.05 + Math.random() * 1.0, type: 'highpass', freq: 1800 + Math.random() * 3000 })
+    quack(0, 1.45, 0.16)
+    quack(0.13, 1.6, 0.1)
   },
   bonk: () => {
     tone(240, { dur: 0.16, type: 'sine', vol: 0.26, slide: -150, wet: 0.1 })
@@ -267,55 +293,74 @@ export function play(name) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Music: a bouncy I-V-vi-IV loop with a pentatonic lead                */
+/* Music: a calm, slow lo-fi loop - soft pads, a music-box melody,      */
+/* a gentle bass and the odd bird chirp. No drums.                      */
 /* ------------------------------------------------------------------ */
 
-const BPM = 118
+const BPM = 70
 const BEAT = 60 / BPM
-// C, G, Am, F (root frequencies for the bass, chord tones for the pads)
+// Fmaj7 - Em7 - Dm7 - Cmaj7 (bass root + soft three-note pad voicing).
 const PROG = [
-  { bass: 65.41, chord: [261.63, 329.63, 392.0] },
-  { bass: 98.0, chord: [246.94, 293.66, 392.0] },
-  { bass: 110.0, chord: [261.63, 329.63, 440.0] },
-  { bass: 87.31, chord: [261.63, 349.23, 440.0] },
+  { bass: 87.31, pad: [220.0, 261.63, 329.63], arp: [349.23, 440.0, 523.25, 659.25] },
+  { bass: 82.41, pad: [196.0, 246.94, 293.66], arp: [329.63, 392.0, 493.88, 587.33] },
+  { bass: 73.42, pad: [174.61, 220.0, 261.63], arp: [293.66, 349.23, 440.0, 523.25] },
+  { bass: 65.41, pad: [196.0, 246.94, 329.63], arp: [261.63, 329.63, 392.0, 493.88] },
 ]
-const PENTA = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5]
-// Lead pattern: index into PENTA per eighth note (-1 = rest), 2 bars x 8.
-const LEAD = [
-  [0, -1, 2, 3, -1, 2, 1, -1, 2, -1, 3, 4, -1, 3, 2, -1],
-  [4, -1, 3, 2, 3, -1, 1, -1, 0, 1, 2, -1, 3, -1, -1, -1],
+// C major pentatonic, two octaves.
+const PENTA = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5, 1174.66]
+// Melody: index into PENTA per eighth note (-1 = rest); 4 bars x 8 per phrase.
+const MELODY = [
+  [4, -1, -1, 3, -1, -1, 2, -1, /**/ 3, -1, -1, -1, 1, -1, -1, -1, /**/ 2, -1, -1, 1, -1, 0, -1, -1, /**/ 1, -1, -1, -1, -1, -1, -1, -1],
+  [2, -1, 3, -1, 4, -1, -1, -1, /**/ 5, -1, -1, 4, -1, -1, 3, -1, /**/ 4, -1, -1, -1, 2, -1, -1, -1, /**/ 0, -1, -1, -1, -1, -1, -1, -1],
 ]
+
+/** A soft music-box / bell note: sine + a quiet octave partial, long decay. */
+function bell(f, at, out, vol = 0.11) {
+  tone(f, { dur: 1.9, type: 'sine', vol, at, out, attack: 0.012 })
+  tone(f * 2, { dur: 0.7, type: 'sine', vol: vol * 0.22, at, out, attack: 0.006 })
+}
 
 function startMusic() {
   if (musicTimer) return
-  let next = ctx.currentTime + 0.2
+  let next = ctx.currentTime + 0.3
   let step = 0
   const lp = ctx.createBiquadFilter()
   lp.type = 'lowpass'
-  lp.frequency.value = 2400
+  lp.frequency.value = 2600
   lp.connect(musicBus)
   const out = lp
   const schedule = () => {
-    while (next < ctx.currentTime + 0.4) {
+    while (next < ctx.currentTime + 0.5) {
       const bar = Math.floor(step / 8) % 4
       const eighth = step % 8
       const ch = PROG[bar]
       const at = next - ctx.currentTime
-      // Bass on beats, octave hop on the off-beat.
-      if (eighth % 2 === 0) tone(ch.bass * (eighth % 4 === 2 ? 2 : 1), { dur: BEAT * 0.45, type: 'triangle', vol: 0.5, at, out })
-      // Pad stabs on 2 and 4.
-      if (eighth === 2 || eighth === 6) ch.chord.forEach((f) => tone(f, { dur: BEAT * 0.35, type: 'square', vol: 0.07, at, out }))
-      // Lead.
-      const pat = LEAD[Math.floor(step / 32) % 2]
-      const n = pat[step % 16]
-      if (n >= 0) tone(PENTA[n], { dur: BEAT * 0.42, type: 'triangle', vol: 0.18, at, out, vib: 4 })
-      // Soft hat on every eighth, kick on 1 and 3.
-      noise({ dur: 0.04, vol: eighth % 2 ? 0.05 : 0.03, at, type: 'highpass', freq: 8000, out })
-      if (eighth === 0 || eighth === 4) tone(110, { dur: 0.16, type: 'sine', vol: 0.55, slide: -70, at, out })
+      if (eighth === 0) {
+        // Warm pad swelling over the whole bar + a long soft bass note.
+        ch.pad.forEach((f) => {
+          tone(f, { dur: BEAT * 4.3, type: 'sine', vol: 0.09, at, out, attack: BEAT * 1.4 })
+          tone(f * 1.003, { dur: BEAT * 4.3, type: 'triangle', vol: 0.025, at, out, attack: BEAT * 1.6 })
+        })
+        tone(ch.bass, { dur: BEAT * 3.6, type: 'sine', vol: 0.32, at, out, attack: 0.08 })
+      }
+      if (eighth === 5) tone(ch.bass * 1.5, { dur: BEAT * 1.4, type: 'sine', vol: 0.12, at, out, attack: 0.06 })
+      // Slow rolling arpeggio, very quiet, on the off-beats.
+      if (eighth % 2 === 1) tone(ch.arp[(eighth >> 1) % 4], { dur: BEAT * 1.2, type: 'triangle', vol: 0.028, at, out, attack: 0.02 })
+      // Music-box melody (phrases alternate; every third pass rests to breathe).
+      const pass = Math.floor(step / 32)
+      if (pass % 3 !== 2) {
+        const n = MELODY[pass % 2][step % 32]
+        if (n >= 0) bell(PENTA[n], at, out)
+      }
+      // A distant bird now and then.
+      if (eighth === 3 && Math.random() < 0.12) {
+        const f = 2600 + Math.random() * 900
+        for (let k = 0; k < 2 + Math.floor(Math.random() * 3); k += 1) tone(f, { dur: 0.07, type: 'sine', vol: 0.03, slide: 700, at: at + k * 0.11, out })
+      }
       next += BEAT / 2
       step += 1
     }
   }
-  musicTimer = setInterval(schedule, 100)
+  musicTimer = setInterval(schedule, 120)
   schedule()
 }

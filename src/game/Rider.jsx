@@ -1,23 +1,16 @@
 import { useFrame } from '@react-three/fiber'
 import { memo, useRef } from 'react'
-import { RingGeometry } from 'three'
-
-import { runtime } from '../state/store'
 import Avatar from './Avatar'
 import Duck from './Duck'
 
-const RING = new RingGeometry(0.8, 1.05, 48)
-
 /**
  * A player riding their duck: the duck waddles, the avatar sits in it and paddles.
- * Jumps get a stretch + a quick 360 twirl, landings a squash. A golden ring flashes on
- * level-up / rebirth (runtime.flashes[sid]).
+ * Jumps get a stretch + a quick 360 twirl, landings a squash.
  *
  * motionRef.current = { time, ratio, grounded, vy, jumpT, landT }
  */
-export const Rider = memo(function Rider({ duck, equipped, proportions, motionRef, flashKey, onReady }) {
+export const Rider = memo(function Rider({ duck, equipped, proportions, motionRef, onReady }) {
   const spin = useRef()
-  const flash = useRef()
   useFrame(() => {
     const mo = motionRef.current
     if (spin.current) {
@@ -27,30 +20,16 @@ export const Rider = memo(function Rider({ duck, equipped, proportions, motionRe
       spin.current.rotation.y = mo.twirl ? e * Math.PI * 2 : 0
       spin.current.rotation.x = mo.grounded ? 0 : Math.max(-0.25, Math.min(0.25, -mo.vy * 0.015))
     }
-    if (flash.current) {
-      const at = runtime.flashes.get(flashKey)
-      const age = at ? (performance.now() - at) / 1000 : 9
-      const on = age < 0.9
-      flash.current.visible = on
-      if (on) {
-        const s = 1 + age * 4
-        flash.current.scale.set(s, s, s)
-        flash.current.material.opacity = 0.9 * (1 - age / 0.9)
-      }
-    }
   })
   return (
     <group>
       <group ref={spin}>
         <Duck id={duck} motionRef={motionRef} />
         {/* The rider sits behind the neck, legs hanging down both sides of it. */}
-        <group position={[0, 0.98, -0.12]}>
+        <group position={[0, 0.92, -0.12]}>
           <Avatar equipped={equipped} proportions={proportions} motionRef={motionRef} onReady={onReady} />
         </group>
       </group>
-      <mesh ref={flash} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.15, 0]} geometry={RING} visible={false}>
-        <meshBasicMaterial color="#ffe14a" transparent opacity={0} depthWrite={false} toneMapped={false} />
-      </mesh>
     </group>
   )
 })

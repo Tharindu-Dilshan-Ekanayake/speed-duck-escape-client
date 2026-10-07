@@ -1,7 +1,8 @@
 import { useFrame } from '@react-three/fiber'
-import { memo, useMemo, useRef } from 'react'
+import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   BoxGeometry,
+  Color,
   ConeGeometry,
   CylinderGeometry,
   MeshBasicMaterial,
@@ -19,6 +20,7 @@ import {
   boulderState,
   diskAngle,
   dynBox,
+  floodState,
   METEOR_HIT,
   meteorPhase,
   pendAngle,
@@ -27,6 +29,7 @@ import {
 } from '../dynamics'
 import { additiveMaterial, liquidMaterial, surfaceMaterial } from '../materials'
 import { boulderGeometry } from './geometry'
+import { Label } from './Signs'
 
 const BOX = new BoxGeometry(1, 1, 1)
 const CYL = new CylinderGeometry(1, 1, 1, 20)
@@ -42,6 +45,7 @@ const rock = new MeshStandardMaterial({ color: '#8d8478', roughness: 0.95, flatS
 const ghostMat = new MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.12, depthWrite: false })
 const meteorMat = new MeshStandardMaterial({ color: '#5a2a1a', emissive: '#ff5a00', emissiveIntensity: 1.2, flatShading: true })
 const warnMat = new MeshBasicMaterial({ color: '#ff2a2a', transparent: true, opacity: 0.7, depthWrite: false, toneMapped: false })
+const bridgeTimber = new MeshStandardMaterial({ color: '#ffffff', roughness: 0.86 })
 
 const localNow = () => performance.now() / 1000
 
@@ -88,6 +92,61 @@ function DynBoxes({ items, c, m, ghost }) {
       {ghost && <instancedMesh ref={ghostRef} args={[BOX, ghostMat, items.length]} frustumCulled={false} />}
     </>
   )
+}
+
+/** Planks, timber beams and rope rails all follow the same moving collision deck. */
+function BridgeDecks({ items }) {
+  const ref = useRef()
+  const poses = useMemo(() => new Map(items.map((d) => [d.id, { x: d.x, y: d.y, z: d.z }])), [items])
+  const parts = useMemo(() => items.flatMap((d) => {
+    const out = []
+    const add = (x, y, z, w, h, len, color) => out.push({ id: d.id, x, y, z, w, h, len, color: new Color(color) })
+    const count = Math.ceil(d.d / 0.65)
+    const pitch = d.d / count
+    for (let i = 0; i < count; i += 1) {
+      const color = new Color(d.c).multiplyScalar(i % 3 === 0 ? 0.82 : 1)
+      add(0, 0, -d.d / 2 + (i + 0.5) * pitch, d.w, d.h, pitch - 0.045, color)
+    }
+    for (const side of [-1, 1]) {
+      add(side * d.w * 0.33, -d.h / 2 - 0.06, 0, 0.2, 0.16, d.d, '#593d2b')
+      for (const end of [-1, 1]) add(side * (d.w / 2 - 0.12), d.h / 2 + 0.5, end * (d.d / 2 - 0.16), 0.14, 1, 0.14, '#705038')
+      add(side * (d.w / 2 - 0.12), d.h / 2 + 0.92, 0, 0.065, 0.065, d.d, '#c3b08a')
+    }
+    return out
+  }), [items])
+
+  useLayoutEffect(() => {
+    const mesh = ref.current
+    if (!mesh) return
+    parts.forEach((part, i) => mesh.setColorAt(i, part.color))
+    mesh.instanceColor.needsUpdate = true
+  }, [parts])
+
+  useFrame(() => {
+    const mesh = ref.current
+    if (!mesh) return
+    const T = worldTime()
+    const now = localNow()
+    dummy.rotation.set(0, 0, 0)
+    for (const d of items) {
+      const b = dynBox(d, T, runtime.hazards.sinks, now)
+      const pose = poses.get(d.id)
+      const st = d.t === 'sink' ? runtime.hazards.sinks.get(d.id) : null
+      const shake = st && now - st.t0 < d.delay ? Math.sin(now * 55) * 0.055 : 0
+      pose.x = (b.minX + b.maxX) / 2 + shake
+      pose.y = (b.minY + b.maxY) / 2
+      pose.z = (b.minZ + b.maxZ) / 2
+    }
+    parts.forEach((part, i) => {
+      const pose = poses.get(part.id)
+      dummy.position.set(pose.x + part.x, pose.y + part.y, pose.z + part.z)
+      dummy.scale.set(part.w, part.h, part.len)
+      dummy.updateMatrix()
+      mesh.setMatrixAt(i, dummy.matrix)
+    })
+    mesh.instanceMatrix.needsUpdate = true
+  })
+  return <instancedMesh ref={ref} args={[BOX, bridgeTimber, parts.length]} castShadow receiveShadow frustumCulled={false} />
 }
 
 /* ---- Sweepers, pendulums, disks, boulders, meteors, wind ---------------- */
@@ -281,6 +340,33 @@ function RisingLava({ S }) {
   return <mesh ref={ref} geometry={BOX} material={mat} position={[S.cx, S.rise.y0 - 15, S.z0 - len / 2]} scale={[S.half * 2 + 1, 30, len]} />
 }
 
+function LavaFlood({ d }) {
+  const ref = useRef()
+  const [status, setStatus] = useState(() => floodState(d, worldTime()))
+  const shown = useRef(`${status.phase}:${status.seconds}`)
+  useFrame(() => {
+    const next = floodState(d, worldTime())
+    if (ref.current) ref.current.position.y = next.y - 6
+    const key = `${next.phase}:${next.seconds}`
+    if (shown.current !== key) {
+      shown.current = key
+      setStatus(next)
+    }
+  })
+  const text = {
+    clear: `PATH CLEAR - ${status.seconds}s`,
+    rising: `LAVA RISING - ${status.seconds}s`,
+    flooded: `LAVA HIGH - WAIT ${status.seconds}s`,
+    draining: `LAVA DRAINING - ${status.seconds}s`,
+  }[status.phase]
+  return (
+    <>
+      <mesh ref={ref} geometry={BOX} material={liquidMaterial('lava')} position={[d.x, status.y - 6, d.z]} scale={[d.w, 12, d.d]} />
+      <Label text={text} style={status.phase === 'clear' ? 'green' : 'warn'} height={0.9} position={[d.x, 5.3, d.z + d.d / 2 - 1]} billboard />
+    </>
+  )
+}
+
 /* ---- Per-stage composition --------------------------------------------- */
 
 export const StageDynamics = memo(function StageDynamics({ stage }) {
@@ -288,6 +374,7 @@ export const StageDynamics = memo(function StageDynamics({ stage }) {
   const boxGroups = useMemo(() => {
     const groups = new Map()
     for (const d of S.dyn) {
+      if (d.bridgeDeck) continue
       if (d.t !== 'move' && d.t !== 'blink' && d.t !== 'sink') continue
       const m = d.m === 'laser' ? 'laser' : d.c === '#ffffff' && d.cloudTile ? 'smooth' : 'stud'
       const key = `${d.c}|${m}`
@@ -300,12 +387,15 @@ export const StageDynamics = memo(function StageDynamics({ stage }) {
   }, [S])
   const boulders = useMemo(() => S.dyn.filter((d) => d.t === 'boulder'), [S])
   const meteors = useMemo(() => S.dyn.filter((d) => d.t === 'meteor'), [S])
+  const bridges = useMemo(() => S.dyn.filter((d) => d.bridgeDeck), [S])
   return (
     <>
       {boxGroups.map((g) => (
         <DynBoxes key={g.key} items={g.items} c={g.c} m={g.m} ghost={g.ghost} />
       ))}
+      {bridges.length > 0 && <BridgeDecks items={bridges} />}
       {S.dyn.map((d) => {
+        if (d.t === 'flood') return <LavaFlood key={d.id} d={d} />
         if (d.t === 'sweep') return <Sweeper key={d.id} d={d} />
         if (d.t === 'pend') return <Pendulum key={d.id} d={d} />
         if (d.t === 'disk') return <Disk key={d.id} d={d} />
