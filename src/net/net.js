@@ -22,7 +22,8 @@ import { createOfflineRoom } from './offline'
 const DIRECT_URL = import.meta.env.VITE_SERVER_URL || ''
 const GAME = import.meta.env.VITE_GAME_ID || GAME_ID
 const MATCHMAKER = import.meta.env.VITE_MATCHMAKER_URL || 'https://play.bloxity.io'
-const CONNECT_TIMEOUT_MS = 9000
+// Generous: after idle time Legion scales to zero and the first join cold-starts a pod.
+const CONNECT_TIMEOUT_MS = 25000
 
 let room = null
 let connecting = false
@@ -110,7 +111,14 @@ export async function connect() {
     }
     const endpoint = await withTimeout(resolveEndpoint(), CONNECT_TIMEOUT_MS)
     const client = new Client(endpoint)
-    room = await withTimeout(client.joinOrCreate(ROOM_NAME, joinOptions()), CONNECT_TIMEOUT_MS)
+    const joining = client.joinOrCreate(ROOM_NAME, joinOptions())
+    try {
+      room = await withTimeout(joining, CONNECT_TIMEOUT_MS)
+    } catch (err) {
+      // A join that lands after we gave up must not linger as a ghost player.
+      joining.then((late) => late.leave(true)).catch(() => {})
+      throw err
+    }
     failures = 0
     wire(room)
     safeCall(getSDK()?.game?.updateRoom, room.roomId)
