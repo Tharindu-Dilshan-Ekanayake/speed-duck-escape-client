@@ -1,84 +1,82 @@
-import { Environment } from '@react-three/drei'
-import { Canvas, useFrame } from '@react-three/fiber'
-import { Physics } from '@react-three/rapier'
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { useEffect, useRef } from 'react'
+import { NeutralToneMapping, PMREMGenerator } from 'three'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 
-import { useBloxity } from '../bloxity/BloxityContext'
-import FollowCamera from './FollowCamera'
-import Ground from './Ground'
-import Player from './Player'
+import { useGame } from '../state/store'
+import CameraRig from './CameraRig'
+import Bursts from './fx/Bursts'
+import Popups from './fx/Popups'
+import LocalPlayer from './LocalPlayer'
+import { tickMaterials } from './materials'
+import RemotePlayers from './RemotePlayers'
+import Sky, { Lights } from './Sky'
+import World from './world/World'
 
-/**
- * Fires `onFirstFrame` after the renderer has actually drawn once.
- * `loadingEnd()` should mean "the player can see the game", not "React mounted".
- */
-function FirstFrameSignal({ onFirstFrame }) {
-  const fired = useRef(false)
-  useFrame(() => {
-    if (fired.current) return
-    fired.current = true
-    onFirstFrame()
+/** Drives material animation and reports "first frames rendered" to the loading screen. */
+function Ticker() {
+  const frames = useRef(0)
+  const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
+  const camera = useThree((s) => s.camera)
+  useEffect(() => {
+    // Warm up shaders so the first seconds of play don't hitch.
+    try {
+      gl.compile(scene, camera)
+    } catch {
+      /* best effort */
+    }
+  }, [gl, scene, camera])
+  useFrame(({ clock }) => {
+    tickMaterials(clock.elapsedTime)
+    frames.current += 1
+    if (frames.current === 8) useGame.setState({ sceneReady: true })
   })
   return null
 }
 
+function Environment() {
+  const gl = useThree((s) => s.gl)
+  const scene = useThree((s) => s.scene)
+  useEffect(() => {
+    const pmrem = new PMREMGenerator(gl)
+    const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+    scene.environment = env
+    scene.environmentIntensity = 0.4
+    return () => {
+      scene.environment = null
+      env.dispose()
+      pmrem.dispose()
+    }
+  }, [gl, scene])
+  return null
+}
+
 export function GameScene() {
-  const { game } = useBloxity()
-  const playerBodyRef = useRef(null)
-
-  const [avatarReady, setAvatarReady] = useState(false)
-  const loadingEnded = useRef(false)
-
-  const handleAvatarReady = useCallback(() => setAvatarReady(true), [])
-
-  // Only end the loading screen once the avatar has finished assembling *and* a
-  // frame has rendered with it in place.
-  const handleFirstFrame = useCallback(() => {
-    if (loadingEnded.current || !avatarReady) return
-    loadingEnded.current = true
-    game.loadingEnd()
-  }, [avatarReady, game])
-
-  // The first frame usually renders before the avatar finishes downloading, so the
-  // frame callback alone isn't enough — close the loading screen here too.
-  useEffect(() => {
-    if (!avatarReady || loadingEnded.current) return
-    loadingEnded.current = true
-    game.loadingEnd()
-  }, [avatarReady, game])
-
-  useEffect(() => {
-    game.loadingStep('Preparing scene…')
-  }, [game])
-
+  const quality = useGame((s) => s.settings.quality)
+  const high = quality === 'high'
   return (
     <Canvas
-      shadows
-      camera={{ position: [0, 5, 10], fov: 60 }}
-      onCreated={({ gl }) => gl.setClearColor('#87ceeb')}
+      key={quality}
+      shadows={high ? 'percentage' : false}
+      dpr={high ? [1, 1.75] : [0.75, 1]}
+      gl={{ antialias: high, powerPreference: 'high-performance' }}
+      camera={{ fov: 68, near: 0.1, far: 1600, position: [0, 8, 34] }}
+      onCreated={({ gl }) => {
+        gl.toneMapping = NeutralToneMapping
+        gl.toneMappingExposure = 1.08
+      }}
     >
-      <hemisphereLight args={['#bfe3ff', '#3f5d3f', 0.8]} />
-      <directionalLight
-        castShadow
-        position={[10, 20, 10]}
-        intensity={1.8}
-        shadow-mapSize={[2048, 2048]}
-      />
-
-      <Suspense fallback={null}>
-        <Environment preset="city" />
-        <Physics gravity={[0, -18, 0]}>
-          <Ground />
-          <Player
-            bodyRef={playerBodyRef}
-            position={[0, 3, 8]}
-            onAvatarReady={handleAvatarReady}
-          />
-        </Physics>
-      </Suspense>
-
-      <FollowCamera bodyRef={playerBodyRef} />
-      <FirstFrameSignal onFirstFrame={handleFirstFrame} />
+      <Environment />
+      <Sky />
+      <Lights shadows={high} />
+      <World />
+      <LocalPlayer />
+      <RemotePlayers />
+      <Popups />
+      <Bursts />
+      <CameraRig />
+      <Ticker />
     </Canvas>
   )
 }

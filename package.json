@@ -1,5 +1,5 @@
 {
-  "name": "client",
+  "name": "speed-duck-escape-client",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,16 +7,17 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "sync-shared": "node ../speed-duck-escape-server/scripts/sync-shared.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
-    "@react-three/rapier": "^2.2.0",
     "react": "~19.2.0",
     "react-dom": "~19.2.0",
     "three": "^0.186.0",
-    "zustand": "^5.0.15"
+    "zustand": "^5.0.15",
+    "colyseus.js": "^0.16.22"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

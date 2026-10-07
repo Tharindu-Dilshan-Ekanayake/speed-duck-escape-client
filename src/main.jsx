@@ -13,3 +13,10 @@ createRoot(document.getElementById('root')).render(
     </BloxityProvider>
   </StrictMode>,
 )
+
+// Dev-only handle for automated play-testing (stripped from production builds).
+if (import.meta.env.DEV) {
+  Promise.all([import('./state/store'), import('./net/net')]).then(([store, net]) => {
+    window.__sde = { runtime: store.runtime, useGame: store.useGame, send: net.send }
+  })
+}

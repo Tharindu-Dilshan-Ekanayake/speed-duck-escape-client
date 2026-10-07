@@ -1,0 +1,318 @@
+import { useFrame } from '@react-three/fiber'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+
+import { play } from '../audio/sfx'
+import { useBloxityStore } from '../bloxity/store'
+import { send } from '../net/net'
+import { lobbySpawn, onPad, regionAt, STAGES, treadAt } from '../shared/course'
+import { STEP_DISTANCE, TREADMILL_STEPS, speedStat, treadById, velocityFor } from '../shared/gameData'
+import { xpPerStep } from '../shared/rules'
+import { runtime, useGame, worldTime } from '../state/store'
+import { sinkExpired } from './dynamics'
+import { readInput, installKeyboard } from './input'
+import { findPrompt } from './interactions'
+import { buildCollision, createPlayer, placePlayer, stageDyn, stepPlayer } from './physics'
+import Rider, { newMotion } from './Rider'
+
+const SEND_EVERY = 0.1
+const round2 = (v) => Math.round(v * 100) / 100
+
+const dynById = new Map()
+for (let n = 1; n < STAGES.length; n += 1) for (const d of STAGES[n].dyn) dynById.set(d.id, d)
+
+/** Dynamics near a stage (its own + neighbours, so boundaries behave). */
+const dynCache = new Map()
+function dynNear(stage) {
+  if (!dynCache.has(stage)) {
+    const list = stage ? [...(stageDyn.get(stage - 1) || []), ...(stageDyn.get(stage) || []), ...(stageDyn.get(stage + 1) || [])] : []
+    dynCache.set(stage, list)
+  }
+  return dynCache.get(stage)
+}
+
+function killCauseFor(S) {
+  const kind = S?.planes?.find((p) => p.kind === 'water' || p.kind === 'lava' || p.kind === 'toxic')?.kind
+  return kind === 'water' ? 'splash' : kind ? 'burn' : 'fall'
+}
+
+const DEATH_SFX = { splash: 'splash', wave: 'splash', zap: 'zap', burn: 'burn', fall: 'fall' }
+const DEATH_COLOR = { splash: '#7ff0ff', wave: '#7ff0ff', zap: '#ff3a4a', burn: '#ff8a1a', fall: '#ffffff' }
+
+function resetHazards() {
+  runtime.hazards.sinks.clear()
+  runtime.hazards.wave = null
+  runtime.hazards.rise = null
+}
+
+export function LocalPlayer() {
+  const group = useRef()
+  const motion = useRef(newMotion())
+  const equipped = useBloxityStore((s) => s.equipped)
+  const proportions = useBloxityStore((s) => s.proportions)
+  const duck = useGame((s) => s.profile?.duck || 'rubber')
+
+  const pl = useMemo(() => {
+    buildCollision()
+    // Reuse the existing body if the canvas remounts (e.g. a graphics-quality change).
+    const p = runtime.me || createPlayer(lobbySpawn(1))
+    runtime.me = p
+    return p
+  }, [])
+
+  const st = useRef({
+    sendT: 0,
+    stepAcc: 0,
+    treadAcc: 0,
+    treadPop: 0,
+    stepSfx: 0,
+    promptT: 0,
+    prevStage: 0,
+    region: { world: 1, stage: 0 },
+    run: null,
+    Tprev: worldTime(),
+    facing: Math.PI,
+    lastX: pl.x,
+    lastZ: pl.z,
+  })
+
+  useEffect(() => installKeyboard(), [])
+  useEffect(() => {
+    runtime.interact = () => {
+      const pr = useGame.getState().prompt
+      if (!pr || pr.done) return
+      if (pr.locked) {
+        play('error')
+        useGame.getState().toast(pr.cost ? 'Not enough Wins!' : pr.sub, 'error')
+        return
+      }
+      play('click')
+      pr.action?.()
+    }
+    return () => {
+      runtime.interact = null
+    }
+  }, [])
+
+  const onReady = useCallback(() => useGame.setState({ avatarReady: true }), [])
+
+  useFrame((_state, dtRaw) => {
+    const dt = Math.min(dtRaw, 0.05)
+    const s = st.current
+    const g = useGame.getState()
+    const prof = g.profile
+    const mo = motion.current
+
+    if (runtime.pendingTeleport) {
+      const t = runtime.pendingTeleport
+      runtime.pendingTeleport = null
+      placePlayer(pl, t)
+      resetHazards()
+      s.facing = t.yaw ?? Math.PI
+      s.prevStage = -1
+      s.lastX = pl.x
+      s.lastZ = pl.z
+      s.sendT = SEND_EVERY
+      play('spawn')
+    }
+
+    const T = worldTime()
+    const now = performance.now() / 1000
+    const reg = regionAt(pl.x, pl.z)
+    const S = reg.stage ? STAGES[reg.stage] : null
+
+    // ---- Steering, relative to the camera ----
+    const inp = readInput()
+    const yaw = runtime.cameraYaw
+    const fx = -Math.sin(yaw)
+    const fz = -Math.cos(yaw)
+    const rx = Math.cos(yaw)
+    const rz = -Math.sin(yaw)
+    const speed = velocityFor(speedStat(prof?.level || 1)) * (g.speedPct / 100)
+
+    const kill = (cause) => {
+      play(DEATH_SFX[cause] || 'fall')
+      runtime.bursts.push({ kind: 'poof', x: pl.x, y: pl.y + 1, z: pl.z, at: performance.now(), color: DEATH_COLOR[cause] })
+      // Falling / getting caught in a stage sends you back to the lobby.
+      const spawn = lobbySpawn(reg.world)
+      placePlayer(pl, spawn)
+      resetHazards()
+      s.facing = spawn.yaw
+      s.lastX = pl.x
+      s.lastZ = pl.z
+      s.run = null
+      s.prevStage = -1
+      send('respawn', { stage: 0 })
+      if (cause === 'wave') g.toast('The tsunami got you! Run faster - level up for more Speed.', 'warn')
+    }
+
+    const events = stepPlayer(
+      pl,
+      { dirX: fx * inp.fwd + rx * inp.right, dirZ: fz * inp.fwd + rz * inp.right, speed, jump: inp.jump },
+      dt,
+      { T, Tprev: s.Tprev, now, sinks: runtime.hazards.sinks, dyn: dynNear(reg.stage), killY: S ? S.killY : -25, killCause: killCauseFor(S) },
+    )
+    s.Tprev = T
+
+    let died = false
+    for (const e of events) {
+      if (e.type === 'jump') {
+        play('jump')
+        mo.jumpT = 0
+      } else if (e.type === 'bounce') {
+        play('bounce')
+        mo.jumpT = 0
+      } else if (e.type === 'land') {
+        if (e.speed > 9) {
+          play('land')
+          mo.landT = 0
+          runtime.bursts.push({ kind: 'dust', x: pl.x, y: pl.y, z: pl.z, at: performance.now() })
+        }
+      } else if (e.type === 'bonk') {
+        play('bonk')
+        runtime.shake = 0.45
+      } else if (e.type === 'sink') {
+        play('sink')
+      } else if (e.type === 'kill' && !died) {
+        died = true
+        kill(e.cause)
+      }
+    }
+
+    // Sunk stones pop back up after a while.
+    for (const [id, stt] of runtime.hazards.sinks) {
+      const d = dynById.get(id)
+      if (!d || sinkExpired(d, stt, now)) runtime.hazards.sinks.delete(id)
+    }
+
+    // ---- Chasing tsunami / rising lava (per player) ----
+    const hz = runtime.hazards
+    if (!died && S?.wave) {
+      const u = S.z0 - pl.z
+      if (!hz.wave || hz.wave.stage !== S.n) hz.wave = { stage: S.n, t0: null, front: S.wave.startU }
+      if (hz.wave.t0 === null && u >= S.wave.triggerU && u < S.wave.stopU) {
+        hz.wave.t0 = now
+        play('wave')
+        g.showBig({ kind: 'warn', text: 'TSUNAMI!', sub: 'RUN!!!', ms: 1400 })
+      }
+      if (hz.wave.t0 !== null) {
+        hz.wave.front = Math.min(S.wave.stopU, S.wave.startU + S.wave.speed * Math.max(0, now - hz.wave.t0 - S.wave.delay))
+        if (u < hz.wave.front - 0.4 && u < S.wave.stopU - 0.5) {
+          died = true
+          kill('wave')
+        }
+      }
+    } else if (hz.wave && (!S || hz.wave.stage !== S.n)) hz.wave = null
+    if (!died && S?.rise) {
+      const u = S.z0 - pl.z
+      if (!hz.rise || hz.rise.stage !== S.n) hz.rise = { stage: S.n, t0: null, y: S.rise.y0, done: false }
+      if (u >= S.rise.stopU) hz.rise.done = true
+      if (hz.rise.t0 === null && u >= S.rise.triggerU && !hz.rise.done) {
+        hz.rise.t0 = now
+        g.showBig({ kind: 'warn', text: 'THE LAVA IS RISING!', sub: 'Climb!!', ms: 1500 })
+        play('burn')
+      }
+      if (hz.rise.t0 !== null && !hz.rise.done) hz.rise.y = Math.min(S.rise.maxY, S.rise.y0 + S.rise.speed * Math.max(0, now - hz.rise.t0 - S.rise.delay))
+      if (!hz.rise.done && pl.y < hz.rise.y - 0.2) kill('burn')
+    } else if (hz.rise && (!S || hz.rise.stage !== S.n)) hz.rise = null
+
+    // ---- Region / stage runs (mirrors the server so pads are claimed once) ----
+    const reg2 = regionAt(pl.x, pl.z)
+    if (reg2.stage !== s.region.stage || reg2.world !== s.region.world) {
+      const prev = s.prevStage
+      const first = reg2.world === 2 ? 11 : 1
+      if (reg2.stage > 0) {
+        const forward = prev === -1 || prev === reg2.stage - 1 || (prev === 0 && reg2.stage === first)
+        s.run = { stage: reg2.stage, sent: !forward }
+      } else s.run = null
+      s.region = reg2
+      s.prevStage = reg2.stage
+      useGame.setState({ region: reg2 })
+    }
+    const S2 = reg2.stage ? STAGES[reg2.stage] : null
+    if (S2 && s.run && !s.run.sent && pl.grounded && onPad(S2.n, pl.x, pl.z, 0.1)) {
+      s.run.sent = true
+      send('pad', { stage: S2.n })
+    }
+
+    // ---- Steps: walking and treadmills both "waddle" ----
+    let onTread = null
+    if (reg2.stage === 0 && pl.grounded && prof) {
+      const t = treadAt(reg2.world, pl.x, pl.z)
+      if (t && prof.treads.includes(t.id)) onTread = t
+    }
+    const per = prof ? xpPerStep(prof, Math.max(0, g.friends - 1)) : 1
+    const moved = Math.hypot(pl.x - s.lastX, pl.z - s.lastZ)
+    s.lastX = pl.x
+    s.lastZ = pl.z
+    if (onTread) {
+      s.treadAcc += TREADMILL_STEPS * treadById(onTread.id).mult * dt
+      s.treadPop += dt
+      if (s.treadPop > 0.12 && s.treadAcc >= 1) {
+        const n = Math.floor(s.treadAcc)
+        s.treadAcc -= n
+        s.treadPop = 0
+        runtime.popups.push({ amount: n * per, x: pl.x, y: pl.y + 2.4, z: pl.z, at: performance.now() })
+        play('step')
+      }
+    } else if (pl.grounded && moved > 0.001 && moved < 3) {
+      s.stepAcc += moved
+      if (s.stepAcc >= STEP_DISTANCE) {
+        const n = Math.floor(s.stepAcc / STEP_DISTANCE)
+        s.stepAcc -= n * STEP_DISTANCE
+        runtime.popups.push({ amount: n * per, x: pl.x, y: pl.y + 2.4, z: pl.z, at: performance.now() })
+        if (now - s.stepSfx > 0.09) {
+          s.stepSfx = now
+          play('step')
+        }
+      }
+    }
+
+    // ---- Facing + animation ----
+    const hs = Math.hypot(pl.vx, pl.vz)
+    if (onTread) s.facing = lerpAngle(s.facing, Math.PI, 1 - Math.pow(0.0001, dt))
+    else if (hs > 0.5) s.facing = lerpAngle(s.facing, Math.atan2(pl.vx, pl.vz), 1 - Math.pow(0.00002, dt))
+    pl.yaw = s.facing
+    mo.time += dt
+    mo.ratio = onTread ? 1 : Math.min(1, hs / Math.max(4, speed * 0.85))
+    mo.grounded = pl.grounded || pl.coyote > 0.08
+    mo.vy = pl.vy
+    mo.jumpT += dt
+    mo.landT += dt
+    runtime.speedNow = hs
+    runtime.onTread = onTread
+    if (group.current) {
+      group.current.position.set(pl.x, pl.y, pl.z)
+      group.current.rotation.y = s.facing
+    }
+
+    // ---- Prompt (E) ----
+    s.promptT += dt
+    if (s.promptT > 0.12) {
+      s.promptT = 0
+      const pr = findPrompt(pl.x, pl.z, reg2.world, prof)
+      if ((pr?.key || null) !== (g.prompt?.key || null)) useGame.setState({ prompt: pr })
+    }
+
+    // ---- Network ----
+    s.sendT += dt
+    if (s.sendT >= SEND_EVERY) {
+      s.sendT = 0
+      const flags = (hs > 0.3 ? 1 : 0) | (pl.grounded ? 2 : 0) | (pl.vy > 0.5 ? 4 : 0) | (onTread ? 8 : 0) | (pl.stun > 0 ? 16 : 0)
+      send('pos', [round2(pl.x), round2(pl.y), round2(pl.z), round2(s.facing), flags])
+    }
+  })
+
+  return (
+    <group ref={group}>
+      <Rider duck={duck} equipped={equipped} proportions={proportions} motionRef={motion} flashKey="me" onReady={onReady} />
+    </group>
+  )
+}
+
+function lerpAngle(a, b, t) {
+  let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI
+  if (d < -Math.PI) d += Math.PI * 2
+  return a + d * t
+}
+
+export default LocalPlayer

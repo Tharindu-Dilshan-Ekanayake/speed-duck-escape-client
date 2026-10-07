@@ -385,3 +385,53 @@ export function animateRig(rig, motion) {
   swing(rig, 'Spine1', -0.14 * ratio)
   rig.root.position.y = rig.rootRestY + Math.abs(Math.cos(phase)) * 0.18 * ratio
 }
+
+/**
+ * Pose for riding inside the duck: legs folded forward out of sight, arms paddling
+ * while waddling, thrown up while airborne, resting on the duck when idle.
+ *
+ * @param {object} rig from `collectRig`
+ * @param {{ time: number, ratio: number, grounded: boolean, jumpT: number }} motion
+ */
+export function poseRider(rig, motion) {
+  if (!rig?.skeleton || !motion) return
+  const { time = 0, ratio = 0, grounded = true, jumpT = 9 } = motion
+  rig.root.position.y = rig.rootRestY
+
+  // Straddle the duck: thighs forward and apart, shins hanging down its sides.
+  swing(rig, 'LegL1', -1.25)
+  swing(rig, 'LegR1', -1.25)
+  sway(rig, 'LegL1', -0.5)
+  sway(rig, 'LegR1', 0.5)
+  swing(rig, 'LegL2', 1.35)
+  swing(rig, 'LegR2', 1.35)
+
+  if (!grounded) {
+    // Cheer on the way up, flap on the way down.
+    const up = jumpT < 0.5
+    const flap = Math.sin(time * 22) * 0.35
+    swing(rig, 'ArmL1', up ? -2.6 : -1.6 + flap)
+    swing(rig, 'ArmR1', up ? -2.6 : -1.6 - flap)
+    sway(rig, 'ArmL1', -0.35)
+    sway(rig, 'ArmR1', 0.35)
+    swing(rig, 'Spine1', -0.12)
+    return
+  }
+  if (ratio < 0.05) {
+    const idle = Math.sin(time * 1.7)
+    swing(rig, 'ArmL1', -0.55 + idle * 0.04)
+    swing(rig, 'ArmR1', -0.55 - idle * 0.04)
+    swing(rig, 'ArmL2', 0.5)
+    swing(rig, 'ArmR2', 0.5)
+    swing(rig, 'Spine1', idle * 0.02)
+    return
+  }
+  const phase = time * (7 + ratio * 7)
+  const c = Math.sin(phase)
+  swing(rig, 'ArmL1', -0.7 - c * 0.7 * ratio)
+  swing(rig, 'ArmR1', -0.7 + c * 0.7 * ratio)
+  swing(rig, 'ArmL2', 0.4)
+  swing(rig, 'ArmR2', 0.4)
+  sway(rig, 'Spine1', Math.sin(phase) * 0.08 * ratio)
+  swing(rig, 'Spine1', -0.1 * ratio)
+}

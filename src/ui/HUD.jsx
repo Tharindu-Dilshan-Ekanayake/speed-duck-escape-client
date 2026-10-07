@@ -1,0 +1,357 @@
+import { useEffect, useState } from 'react'
+
+import { play } from '../audio/sfx'
+import { useBloxity } from '../bloxity/BloxityContext'
+import { send } from '../net/net'
+import {
+  DUCKS,
+  PACKS,
+  SPIN_EVERY_MS,
+  STAGE_NAMES,
+  boostPrice,
+  formatNum,
+  formatTime,
+  friendBoost,
+  packPrice,
+  rebirthLevel,
+  speedStat,
+  stepMultiplier,
+  xpForLevel,
+} from '../shared/gameData'
+import { packAmount } from '../shared/rules'
+import { runtime, serverNow, useGame } from '../state/store'
+import { DuckIcon, Gear, Gift, MapIcon, People, Rebirth, Sneaker, Trophy, WheelIcon } from './icons'
+import './hud.css'
+
+/** Re-render on a timer (for countdowns). */
+function useNow(ms = 250) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), ms)
+    return () => clearInterval(id)
+  }, [ms])
+  return now
+}
+
+/** Scales the HUD with the window so it fits phones and 4K alike. */
+function useUiScale() {
+  useEffect(() => {
+    const apply = () => {
+      const s = Math.max(0.48, Math.min(1.1, Math.min(window.innerWidth / 1750, window.innerHeight / 1000)))
+      document.documentElement.style.setProperty('--ui', s.toFixed(3))
+    }
+    apply()
+    window.addEventListener('resize', apply)
+    return () => window.removeEventListener('resize', apply)
+  }, [])
+}
+
+export function goalFor(p) {
+  if (!p) return 'Loading...'
+  if ((p.totalWins || 0) < 3) return 'Start by earning 3 wins!'
+  if (p.ducks.length < 2) return 'Buy the Shadow Duck for +2 per Step!'
+  if (p.maxStage < 3) return 'Reach Stage 3 - beat the tsunami!'
+  if (!p.treads.includes('t2')) return 'Buy the 2X Treadmill!'
+  if (p.maxStage < 5 && p.rebirths === 0) return 'Reach Stage 5!'
+  if (p.rebirths === 0) return p.level < rebirthLevel(0) ? `Reach Level ${rebirthLevel(0)} to Rebirth!` : 'Rebirth for x2 Steps!'
+  if (p.maxStage < 10) return 'Escape all 10 stages of World 1!'
+  if (p.rebirths < 3) return 'Rebirth 3 times to unlock World 2!'
+  if (p.maxStage < 20) return `Escape World 2! (Stage ${p.maxStage}/20)`
+  return 'Collect every duck & top the leaderboards!'
+}
+
+const MENU = [
+  { id: 'rebirth', label: 'Rebirth', key: 'R', cls: 'c-reb', Icon: Rebirth },
+  { id: 'ducks', label: 'Ducks', key: 'Q', cls: 'c-duck', Icon: () => <DuckIcon size={56} /> },
+  { id: 'stages', label: 'Stages', key: 'T', cls: 'c-map', Icon: MapIcon },
+  { id: 'settings', label: 'Settings', key: 'O', cls: 'c-set', Icon: Gear },
+  { id: 'invite', label: 'Invite', key: 'I', cls: 'c-inv', Icon: People },
+  { id: 'gifts', label: 'Free!', key: 'F', cls: 'c-gift', Icon: Gift },
+]
+export { MENU }
+
+export function invite() {
+  const url = 'https://speed-duck-escape.play.bloxity.io'
+  const done = () => useGame.getState().toast('Invite link copied! Friends in your server give +10% Steps each.', 'good')
+  if (navigator.share) {
+    navigator.share({ title: '+1 Speed Duck Escape', text: 'Race me in +1 Speed Duck Escape!', url }).catch(() => {})
+    return
+  }
+  navigator.clipboard?.writeText(url).then(done, done)
+}
+
+function giftReady(session, sessionAt) {
+  if (!session) return false
+  const ms = session.ms + (Date.now() - sessionAt)
+  return [1, 3, 5, 8, 12, 16, 20, 25, 30].some((min, i) => ms >= min * 60000 && !session.claimed.includes(i))
+}
+
+function LeftSide({ profile }) {
+  const setPanel = useGame((s) => s.setPanel)
+  const session = useGame((s) => s.session)
+  const sessionAt = useGame((s) => s.sessionAt)
+  const ready = giftReady(session, sessionAt)
+  return (
+    <div className="corner tl">
+      <div className="wins">
+        <Trophy size={78} />
+        <span className="num gold">{formatNum(profile?.wins || 0)}</span>
+      </div>
+      <div className="side">
+        {MENU.map((m) => (
+          <button
+            key={m.id}
+            className={`sbtn ${m.cls}`}
+            onClick={() => {
+              if (m.id === 'invite') {
+                play('click')
+                invite()
+                return
+              }
+              play('open')
+              setPanel(m.id)
+            }}
+          >
+            <span className="key ol">{m.key}</span>
+            <m.Icon size={54} />
+            <span className="lbl ol">{m.label}</span>
+            {m.id === 'gifts' && ready && <span className="bang ol">!</span>}
+            {m.id === 'rebirth' && profile && profile.level >= rebirthLevel(profile.rebirths) && <span className="bang ol">!</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function TopRight({ profile, now }) {
+  const { identity, isLoggedIn } = useBloxity()
+  const net = useGame((s) => s.net)
+  const friends = useGame((s) => s.friends)
+  const pct = useGame((s) => s.speedPct)
+  const statsAt = useGame((s) => s.statsAt)
+  const setPanel = useGame((s) => s.setPanel)
+  const name = profile?.name || identity?.displayName || identity?.username || 'Guest'
+  const pfp = identity?.pfp
+  const spinLeft = SPIN_EVERY_MS - (((profile?.spinMs || 0) + (now - statsAt)) % SPIN_EVERY_MS)
+  const sNow = serverNow()
+  const price = boostPrice(profile?.maxStage || 1)
+  const boost = (kind) => {
+    play('click')
+    send('boost', { kind })
+  }
+  const netText = net === 'online' ? `Online • ${friends} in server` : net === 'offline' ? 'Offline • solo play' : net === 'error' ? 'Disconnected' : 'Connecting…'
+  return (
+    <div className="corner tr">
+      <div className="idcard">
+        {pfp ? <img src={pfp} alt="" /> : <div className="pfp">{name.charAt(0).toUpperCase()}</div>}
+        <div>
+          <div className="nm">{name}</div>
+          <div className="sub">
+            Lv {profile?.level || 1}
+            {profile?.rebirths ? ` • Rebirth ${profile.rebirths}` : ''} • {isLoggedIn ? 'Bloxity' : 'Guest'}
+          </div>
+        </div>
+      </div>
+      <div className="net">
+        <i className={net === 'online' ? 'dot-on' : net === 'offline' ? 'dot-off' : 'dot-wait'} />
+        {netText}
+      </div>
+      <div className="pct">
+        <button onClick={() => useGame.setState({ speedPct: Math.max(10, pct - 10) })}>−</button>
+        <div className="v ol">{pct}%</div>
+        <button onClick={() => useGame.setState({ speedPct: Math.min(100, pct + 10) })}>+</button>
+      </div>
+      <div className="stat ol">Speed: {formatNum(Math.round(speedStat(profile?.level || 1) * (pct / 100)))}</div>
+      <div className="spin" style={{ pointerEvents: 'auto', cursor: 'pointer' }} onClick={() => setPanel('wheel')}>
+        <div>
+          <div className="t gold">Free Spin In: {formatTime(spinLeft)}</div>
+          <div className="t gold">Spins: {profile?.spins || 0}</div>
+        </div>
+        <WheelIcon size={64} />
+      </div>
+      {[
+        ['wins', '2x WINS', profile?.boostWins],
+        ['speed', '2x SPEED', profile?.boostSpeed],
+      ].map(([kind, label, until]) => {
+        const left = (until || 0) - sNow
+        return (
+          <div key={kind} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <button className={`rbtn ${left > 0 ? 'on' : ''}`} onClick={() => boost(kind)}>
+              <span className="ic">{kind === 'wins' ? <Trophy size={46} /> : <Sneaker size={46} />}</span>
+              <span className="big ol">{label}</span>
+            </button>
+            <div className="price">
+              {left > 0 ? (
+                <span className="ol" style={{ color: '#7dff8a' }}>
+                  {formatTime(left)} left
+                </span>
+              ) : (
+                <>
+                  <span className="ol">ONLY {formatNum(price)}</span>
+                  <Trophy size={30} />
+                </>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function TopCenter({ profile }) {
+  const race = useGame((s) => s.race)
+  const feed = useGame((s) => s.feed)
+  const region = useGame((s) => s.region)
+  const left = Math.max(0, race.until - serverNow())
+  const label = race.phase === 'wait' ? 'Next Race In' : race.phase === 'countdown' ? 'Race Starting In' : 'Race Ends In'
+  const secs = Math.ceil(left / 1000)
+  useEffect(() => {
+    if (race.phase === 'countdown' && secs > 0 && secs <= 5) play('countdown')
+  }, [race.phase, secs])
+  const goal = goalFor(profile)
+  return (
+    <div className="corner tc">
+      <div className="race ol">
+        {label}: {secs}
+      </div>
+      <div key={goal} className="goal">
+        {goal}
+      </div>
+      {region.stage > 0 && (
+        <div className="race ol" style={{ fontSize: 22, color: '#ffe14a' }}>
+          Stage {region.stage} • {STAGE_NAMES[region.stage]}
+        </div>
+      )}
+      <div className="feed">
+        {feed.map((f) => (
+          <div key={f.id} className={`ol ${f.kind}`}>
+            {f.text}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Bottom({ profile }) {
+  const prompt = useGame((s) => s.prompt)
+  const friends = useGame((s) => s.friends)
+  const level = profile?.level || 1
+  const xp = profile?.xp || 0
+  const need = xpForLevel(level)
+  const k = Math.max(0, Math.min(1, xp / need))
+  const mult = stepMultiplier(profile?.rebirths || 0)
+  const duck = DUCKS.find((d) => d.id === profile?.duck) || DUCKS[0]
+  return (
+    <div className="corner bc">
+      {prompt && (
+        <div className={`prompt ${prompt.locked ? 'locked' : ''} ${prompt.done ? 'done' : ''}`} onClick={() => runtime.interact?.()}>
+          <div className="k">{prompt.done ? '✓' : 'E'}</div>
+          <div>
+            <div className="pt ol">{prompt.title}</div>
+            <div className="ps">{prompt.sub}</div>
+          </div>
+        </div>
+      )}
+      <div className="lvrow">
+        <div style={{ width: 300 }} />
+        <div className="lvbar">
+          <div className="fill" style={{ width: `${k * 100}%` }} />
+          <div className="walkers" style={{ left: `${Math.max(12, k * 100)}%` }}>
+            <span>
+              <DuckIcon size={26} body={duck.body} beak={duck.beak} />
+            </span>
+            <span>
+              <DuckIcon size={30} body={duck.body} beak={duck.beak} />
+            </span>
+            <span>
+              <DuckIcon size={46} body={duck.body} beak={duck.beak} glow={duck.fx?.glow} />
+            </span>
+          </div>
+          <div className="txt ol">
+            {formatNum(xp)}/{formatNum(need)}
+          </div>
+          <div className="tag ol">LEVEL {level}</div>
+          <div className="mult">
+            <span className="gold">{mult}X</span>
+            <Rebirth size={44} />
+          </div>
+        </div>
+        <div className="friend ol">
+          <People size={44} />
+          Friend Boost: {Math.round(friendBoost(friends - 1) * 100)}%
+        </div>
+      </div>
+      <div className="packs">
+        {PACKS.map((pk, i) => {
+          const amount = profile ? packAmount(profile, i) : 0
+          const price = packPrice(pk, profile?.maxStage || 1)
+          return (
+            <button
+              key={pk.id}
+              className="pack"
+              onClick={() => {
+                play('click')
+                send('pack', { i })
+              }}
+            >
+              <span className="a ol">
+                +{formatNum(amount)}
+                {pk.kind === 'spins' ? <WheelIcon size={34} /> : <Sneaker size={34} />}
+              </span>
+              <span className="c ol">
+                {formatNum(price)} <Trophy size={18} />
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function Big() {
+  const big = useGame((s) => s.big)
+  if (!big) return null
+  return (
+    <div key={big.id} className={`big ${big.kind}`}>
+      <div className="band">
+        <div className={`txt ${big.kind === 'warn' || big.kind === 'rebirth' || big.kind === 'duck' ? '' : 'gold'}`}>{big.text}</div>
+        {big.sub && <div className="sub2 ol">{big.sub}</div>}
+      </div>
+    </div>
+  )
+}
+
+function Toasts() {
+  const toasts = useGame((s) => s.toasts)
+  return (
+    <div className="toasts">
+      {toasts.map((t) => (
+        <div key={t.id} className={`toast ol ${t.kind}`}>
+          {t.text}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function HUD() {
+  useUiScale()
+  const now = useNow(250)
+  const profile = useGame((s) => s.profile)
+  return (
+    <div className="hud">
+      <TopCenter profile={profile} />
+      <LeftSide profile={profile} />
+      <TopRight profile={profile} now={now} />
+      <Bottom profile={profile} />
+      <Toasts />
+      <Big />
+    </div>
+  )
+}
+
+export default HUD
