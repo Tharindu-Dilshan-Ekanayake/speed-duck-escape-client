@@ -131,6 +131,7 @@ const RemoteRider = memo(function RemoteRider({ sid, player }) {
     if (grounded && !p.grounded) mo.landT = 0
     p.grounded = grounded
     mo.time += dt
+    mo.phase += dt * (7 + mo.ratio * 7)
     mo.grounded = grounded
     mo.vy = r.flags & 4 ? 6 : grounded ? 0 : -6
     // Waddle speed eases toward the real speed (frame-rate independent).

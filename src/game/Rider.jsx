@@ -15,8 +15,8 @@ import Duck from './Duck'
 
 /** Height the duck's centre of mass sits at: flips rotate around it, not the feet. */
 const PIVOT = 1.05
-/** Seat: hips just above the duck's back. */
-const SEAT = [0, 0.68 - PIVOT, -0.16]
+/** Seat (duck space): hips just above the duck's back. */
+const SEAT = [0, 0.68, -0.16]
 
 const SADDLE = new SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2)
 const RIM = new TorusGeometry(1, 0.1, 8, 28)
@@ -29,9 +29,11 @@ const TRICK_TIME = 0.55
 
 export const Rider = memo(function Rider({ duck, equipped, proportions, motionRef, onReady }) {
   const trick = useRef()
+  const rock = useRef()
   const seat = useRef()
-  const state = useRef({ lastJumpT: 9, style: -1 })
-  useFrame(() => {
+  const state = useRef({ lastJumpT: 9, style: -1, sway: 0, swayV: 0, bounce: 0, bounceV: 0 })
+  useFrame((_s, dtRaw) => {
+    const dt = Math.min(dtRaw, 0.05)
     const mo = motionRef.current
     const st = state.current
     // A new jump started: pick the next trick.
@@ -44,12 +46,29 @@ export const Rider = memo(function Rider({ duck, equipped, proportions, motionRe
       const lean = mo.grounded ? 0 : Math.max(-0.25, Math.min(0.25, -mo.vy * 0.015))
       trick.current.rotation.set(st.style === 1 ? turn : lean, st.style === 0 ? turn : 0, st.style === 2 ? turn : 0)
     }
+    // Saddle + rider ride the duck's own waddle (same roll and bob as its body)...
+    const t = mo.time
+    const ratio = mo.ratio || 0
+    const ph = mo.phase ?? t * (7 + ratio * 7)
+    const air = !mo.grounded
+    const roll = air ? 0 : Math.sin(ph) * 0.13 * ratio + Math.sin(t * 1.8) * 0.02
+    const bob = air ? 0 : Math.abs(Math.cos(ph)) * 0.07 * ratio + Math.sin(t * 2) * 0.012
+    if (rock.current) {
+      rock.current.rotation.z = roll
+      rock.current.position.y = bob
+    }
+    // ...and on top of that the rider is a little springy: they lean against each rock of
+    // the duck and settle back, and sink in on landings.
+    const k = 140
+    const c = 13
+    st.swayV += (-k * st.sway - c * st.swayV + -roll * 60) * dt
+    st.sway += st.swayV * dt
+    const landing = Math.max(0, 1 - mo.landT / 0.25)
+    st.bounceV += (-k * st.bounce - c * st.bounceV - landing * 30) * dt
+    st.bounce += st.bounceV * dt
     if (seat.current) {
-      // The rider bounces in the saddle with the waddle, and sinks in on landing.
-      const ph = mo.time * (7 + mo.ratio * 7)
-      const land = Math.max(0, 1 - mo.landT / 0.25)
-      seat.current.position.y = SEAT[1] + (mo.grounded ? Math.abs(Math.sin(ph)) * 0.05 * mo.ratio : 0.04) - land * 0.08
-      seat.current.rotation.z = mo.grounded ? Math.sin(ph) * 0.06 * mo.ratio : 0
+      seat.current.rotation.z = Math.max(-0.35, Math.min(0.35, st.sway))
+      seat.current.position.y = SEAT[1] + Math.max(-0.12, st.bounce) + (air ? 0.04 : 0)
     }
   })
   return (
@@ -57,22 +76,25 @@ export const Rider = memo(function Rider({ duck, equipped, proportions, motionRe
       <group ref={trick}>
         <group position={[0, -PIVOT, 0]}>
           <Duck id={duck} motionRef={motionRef} />
-          {/* Saddle with a gold rim, and a handle across the neck to hold on to. */}
-          <mesh geometry={SADDLE} material={saddleMat} position={[0, 1.13, -0.16]} scale={[0.42, 0.14, 0.5]} />
-          <mesh geometry={RIM} material={goldMat} position={[0, 1.14, -0.16]} rotation={[Math.PI / 2, 0, 0]} scale={[0.42, 0.5, 0.4]} />
-          <mesh geometry={BAR} material={goldMat} position={[0, 1.5, 0.3]} rotation={[0, 0, Math.PI / 2]} />
-          {[1, -1].map((s) => (
-            <mesh key={s} geometry={KNOB} material={goldMat} position={[s * 0.33, 1.5, 0.3]} />
-          ))}
-        </group>
-        <group ref={seat} position={SEAT}>
-          <Avatar equipped={equipped} proportions={proportions} motionRef={motionRef} onReady={onReady} />
+          <group ref={rock}>
+            {/* Saddle with a gold rim, and a handle across the neck to hold on to. */}
+            <mesh geometry={SADDLE} material={saddleMat} position={[0, 1.13, -0.16]} scale={[0.42, 0.14, 0.5]} />
+            <mesh geometry={RIM} material={goldMat} position={[0, 1.14, -0.16]} rotation={[Math.PI / 2, 0, 0]} scale={[0.42, 0.5, 0.4]} />
+            <mesh geometry={BAR} material={goldMat} position={[0, 1.5, 0.3]} rotation={[0, 0, Math.PI / 2]} />
+            {[1, -1].map((s) => (
+              <mesh key={s} geometry={KNOB} material={goldMat} position={[s * 0.33, 1.5, 0.3]} />
+            ))}
+            <group ref={seat} position={SEAT}>
+              <Avatar equipped={equipped} proportions={proportions} motionRef={motionRef} onReady={onReady} />
+            </group>
+          </group>
         </group>
       </group>
     </group>
   )
 })
 
-export const newMotion = () => ({ time: 0, ratio: 0, grounded: true, vy: 0, jumpT: 9, landT: 9, twirl: true })
+/** `phase` is the waddle stride, integrated each frame so speed changes never make it skip. */
+export const newMotion = () => ({ time: 0, phase: 0, ratio: 0, grounded: true, vy: 0, jumpT: 9, landT: 9, twirl: true })
 
 export default Rider

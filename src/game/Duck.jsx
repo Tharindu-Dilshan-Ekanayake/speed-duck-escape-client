@@ -384,7 +384,9 @@ export const Duck = memo(function Duck({ id, motionRef, particles = true }) {
     const mo = motionRef?.current || IDLE
     const t = motionRef ? mo.time : state.clock.elapsedTime
     const ratio = mo.ratio || 0
-    const phase = t * (7 + ratio * 7)
+    // The waddle phase is integrated (see Rider's newMotion), so speed changes never make
+    // the stride skip; display ducks without motion just use the clock.
+    const phase = mo.phase ?? t * (7 + ratio * 7)
     const air = !mo.grounded
     // Waddle: roll side to side, alternate feet.
     if (body.current) {

@@ -397,7 +397,7 @@ export function poseRider(rig, motion) {
   if (!rig?.skeleton || !motion) return
   const { time = 0, ratio = 0, grounded = true, jumpT = 9 } = motion
   rig.root.position.y = rig.rootRestY
-  const phase = time * (7 + ratio * 7)
+  const phase = motion.phase ?? time * (7 + ratio * 7)
   const bob = Math.sin(phase * 2)
 
   if (!grounded) {

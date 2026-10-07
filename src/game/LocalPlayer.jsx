@@ -322,7 +322,10 @@ export function LocalPlayer() {
       supportPose: supportBox ? { x: (supportBox.minX + supportBox.maxX) / 2, y: (supportBox.minY + supportBox.maxY) / 2, z: (supportBox.minZ + supportBox.maxZ) / 2 } : null,
     })
     mo.time += dt
-    mo.ratio = onTread ? 1 : Math.min(1, hs / Math.max(4, speed * 0.85))
+    // Ease the waddle amount and advance the stride phase smoothly.
+    const ratioTarget = onTread ? 1 : Math.min(1, hs / Math.max(4, speed * 0.85))
+    mo.ratio += (ratioTarget - mo.ratio) * (1 - Math.exp(-dt * 12))
+    mo.phase += dt * (7 + mo.ratio * 7)
     mo.grounded = pl.grounded || pl.coyote > 0.08
     mo.vy = pl.vy
     mo.jumpT += dt
