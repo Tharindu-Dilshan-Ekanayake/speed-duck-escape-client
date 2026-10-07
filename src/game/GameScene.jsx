@@ -3,11 +3,12 @@ import { useEffect, useRef } from 'react'
 import { NeutralToneMapping, PMREMGenerator } from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 
-import { useGame } from '../state/store'
+import { runtime, useGame } from '../state/store'
 import CameraRig from './CameraRig'
 import Ambient from './fx/Ambient'
 import Bursts from './fx/Bursts'
 import Footprints from './fx/Footprints'
+import GuideArrow from './fx/GuideArrow'
 import Popups from './fx/Popups'
 import LocalPlayer from './LocalPlayer'
 import { tickMaterials } from './materials'
@@ -31,6 +32,11 @@ function Ticker() {
   }, [gl, scene, camera])
   useFrame(({ clock }) => {
     tickMaterials(clock.elapsedTime)
+    // Re-render the sun's shadow map every other frame: half the shadow cost, no visible lag.
+    if (gl.shadowMap.enabled) {
+      gl.shadowMap.autoUpdate = false
+      if (frames.current % 2 === 0) gl.shadowMap.needsUpdate = true
+    }
     frames.current += 1
     if (frames.current === 8) useGame.setState({ sceneReady: true })
   })
@@ -61,10 +67,11 @@ export function GameScene() {
     <Canvas
       key={quality}
       shadows={high ? 'percentage' : false}
-      dpr={high ? [1, 1.75] : [0.75, 1]}
+      dpr={high ? [1, 1.5] : [0.75, 1]}
       gl={{ antialias: high, powerPreference: 'high-performance' }}
-      camera={{ fov: 68, near: 0.1, far: 1600, position: [0, 8, 34] }}
-      onCreated={({ gl }) => {
+      camera={{ fov: 68, near: 0.15, far: 1100, position: [0, 8, 34] }}
+      onCreated={({ gl, scene }) => {
+        if (import.meta.env.DEV) Object.assign(runtime, { gl, scene })
         gl.toneMapping = NeutralToneMapping
         gl.toneMappingExposure = 1.08
       }}
@@ -79,6 +86,7 @@ export function GameScene() {
       <Popups />
       <Bursts />
       <Ambient />
+      <GuideArrow />
       <CameraRig />
       <Ticker />
     </Canvas>

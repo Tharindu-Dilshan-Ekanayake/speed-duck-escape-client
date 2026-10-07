@@ -3,6 +3,8 @@ import { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import {
   AdditiveBlending,
   BoxGeometry,
+  BufferAttribute,
+  BufferGeometry,
   Color,
   ConeGeometry,
   MeshBasicMaterial,
@@ -18,6 +20,9 @@ import {
   TorusGeometry,
 } from 'three'
 
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+
+import { useGame } from '../../state/store'
 import Duck from '../Duck'
 import { additiveMaterial, liquidMaterial, surfaceMaterial } from '../materials'
 import { Label } from './Signs'
@@ -27,6 +32,7 @@ const CYL = new CylinderGeometry(1, 1, 1, 24)
 const HEX = new CylinderGeometry(1, 1, 1, 6)
 const CONE = new ConeGeometry(1, 1, 16)
 const SPHERE = new SphereGeometry(1, 28, 20)
+const SPHERE_LO = new SphereGeometry(1, 14, 10)
 const TORUS = new TorusGeometry(1, 0.12, 16, 64)
 const DISC = new CylinderGeometry(1, 1, 0.05, 48)
 const PRISM = new CylinderGeometry(1, 1, 1, 3)
@@ -284,6 +290,35 @@ const flowerMats = ['#ff5ad8', '#ffe14a', '#ffffff'].map((c) => std(c, { emissiv
 const WATER_DISC = new CylinderGeometry(1, 1, 0.12, 48)
 const RAINBOW = ['#ff3a3a', '#ff8a1a', '#ffe11a', '#3dff5a', '#29c8ff', '#6b6bff', '#c23dff']
 
+/** Bakes transformed copies of geometries (optionally vertex-coloured) into one mesh. */
+function bakeParts(list) {
+  const geos = list.map(([geo, pos, scale, color]) => {
+    const src = geo.index ? geo.toNonIndexed() : geo.clone()
+    const g = new BufferGeometry()
+    for (const k of ['position', 'normal']) g.setAttribute(k, src.attributes[k])
+    g.scale(...(Array.isArray(scale) ? scale : [scale, scale, scale])).translate(...pos)
+    if (color) {
+      const c = new Color(color)
+      const n = g.attributes.position.count
+      const arr = new Float32Array(n * 3)
+      for (let k = 0; k < n; k += 1) arr.set([c.r, c.g, c.b], k * 3)
+      g.setAttribute('color', new BufferAttribute(arr, 3))
+    }
+    return g
+  })
+  const out = mergeGeometries(geos, false)
+  out.computeBoundingSphere()
+  return out
+}
+
+let LAMP_POST_GEO = null
+const lampPost = () =>
+  (LAMP_POST_GEO ||= bakeParts([
+    [CYL, [0, 0.25, 0], [0.55, 0.5, 0.55]],
+    [CYL, [0, 2.2, 0], [0.14, 4, 0.14]],
+    [CONE, [0, 4.95, 0], [0.5, 0.35, 0.5]],
+  ]))
+
 function Lamp({ p }) {
   const halo = useRef()
   useFrame(({ clock }) => {
@@ -291,32 +326,31 @@ function Lamp({ p }) {
   })
   return (
     <group position={[p.x, p.y, p.z]}>
-      <mesh geometry={CYL} material={LAMP_POST} position={[0, 0.25, 0]} scale={[0.55, 0.5, 0.55]} />
-      <mesh geometry={CYL} material={LAMP_POST} position={[0, 2.2, 0]} scale={[0.14, 4, 0.14]} castShadow />
-      <mesh geometry={SPHERE} material={LAMP_GLOW} position={[0, 4.5, 0]} scale={0.38} />
-      <mesh ref={halo} geometry={SPHERE} material={additiveMaterial('#ffd86a', 0.14)} position={[0, 4.5, 0]} scale={0.95} />
-      <mesh geometry={CONE} material={LAMP_POST} position={[0, 4.95, 0]} scale={[0.5, 0.35, 0.5]} />
+      <mesh geometry={lampPost()} material={LAMP_POST} castShadow />
+      <mesh geometry={SPHERE_LO} material={LAMP_GLOW} position={[0, 4.5, 0]} scale={0.38} />
+      <mesh ref={halo} geometry={SPHERE_LO} material={additiveMaterial('#ffd86a', 0.14)} position={[0, 4.5, 0]} scale={0.95} />
     </group>
   )
 }
 
+const bushMat = std('#ffffff', { flatShading: true, roughness: 0.85, vertexColors: true })
+const FLOWERS = ['#ff5ad8', '#ffe14a', '#ffffff']
+const bushGeos = [0, 1, 2].map((c) =>
+  bakeParts([
+    [SPHERE_LO, [0, 0.5, 0], [0.9, 0.62, 0.85], GREENS[c % 3]],
+    [SPHERE_LO, [0.6, 0.38, 0.2], [0.55, 0.45, 0.5], GREENS[(c + 1) % 3]],
+    [SPHERE_LO, [-0.55, 0.36, -0.1], [0.5, 0.42, 0.5], GREENS[(c + 2) % 3]],
+    ...[
+      [0.2, 1.0, 0.45],
+      [-0.4, 0.85, 0.5],
+      [0.7, 0.75, 0.35],
+      [-0.1, 1.05, -0.3],
+    ].map((pos, i) => [SPHERE_LO, pos, 0.1, FLOWERS[(i + c) % 3]]),
+  ]),
+)
+
 function Bush({ p }) {
-  const s = p.s || 1
-  return (
-    <group position={[p.x, p.y, p.z]} scale={s}>
-      <mesh geometry={SPHERE} material={bushMats[p.c % 3]} position={[0, 0.5, 0]} scale={[0.9, 0.62, 0.85]} castShadow />
-      <mesh geometry={SPHERE} material={bushMats[(p.c + 1) % 3]} position={[0.6, 0.38, 0.2]} scale={[0.55, 0.45, 0.5]} castShadow />
-      <mesh geometry={SPHERE} material={bushMats[(p.c + 2) % 3]} position={[-0.55, 0.36, -0.1]} scale={[0.5, 0.42, 0.5]} castShadow />
-      {[
-        [0.2, 1.0, 0.45],
-        [-0.4, 0.85, 0.5],
-        [0.7, 0.75, 0.35],
-        [-0.1, 1.05, -0.3],
-      ].map(([x, y, z], i) => (
-        <mesh key={i} geometry={SPHERE} material={flowerMats[(i + p.c) % 3]} position={[x, y, z]} scale={0.1} />
-      ))}
-    </group>
-  )
+  return <mesh geometry={bushGeos[p.c % 3]} material={bushMat} position={[p.x, p.y, p.z]} scale={p.s || 1} castShadow />
 }
 
 function WelcomeArch({ p }) {
@@ -382,6 +416,37 @@ function Pond({ p }) {
       <Label text="Duck Pond" style="gold" height={0.7} position={[0, 2.6, 0]} billboard />
     </group>
   )
+}
+
+/* ---- Stage-gate force field (shown only while you are below its level) ------- */
+
+const fieldMat = new ShaderMaterial({
+  uniforms: { uTime: { value: 0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `
+    uniform float uTime; varying vec2 vUv;
+    void main() {
+      float hex = abs(sin(vUv.x * 60.0 + sin(vUv.y * 40.0) * 0.6)) * abs(sin(vUv.y * 34.0 - uTime * 1.5));
+      float edge = smoothstep(0.08, 0.0, min(min(vUv.x, 1.0 - vUv.x), min(vUv.y, 1.0 - vUv.y)));
+      float scan = smoothstep(0.96, 1.0, fract(vUv.y * 3.0 - uTime * 0.6));
+      float a = 0.16 + hex * 0.12 + edge * 0.6 + scan * 0.25;
+      gl_FragColor = vec4(mix(vec3(0.35, 0.85, 1.0), vec3(1.0, 0.45, 0.85), vUv.y * 0.6), a);
+    }`,
+  transparent: true,
+  depthWrite: false,
+  side: DoubleSide,
+  blending: AdditiveBlending,
+  toneMapped: false,
+})
+const FIELD = new BoxGeometry(1, 1, 0.05)
+
+function ForceField({ p }) {
+  const locked = useGame((s) => (s.profile?.level || 1) < p.req)
+  useFrame(({ clock }) => {
+    fieldMat.uniforms.uTime.value = clock.elapsedTime
+  })
+  if (!locked) return null
+  return <mesh geometry={FIELD} material={fieldMat} position={[p.x, p.y + p.h / 2, p.z]} scale={[p.w, p.h, 1]} renderOrder={4} />
 }
 
 /* ---- Floor arrows: chevrons that pulse in the direction to go ---------------- */
@@ -483,6 +548,8 @@ export const Props = memo(function Props({ props }) {
         return <Teleporter key={i} p={p} />
       case 'arrows':
         return <FloorArrows key={i} p={p} />
+      case 'forcefield':
+        return <ForceField key={i} p={p} />
       default:
         return null
     }

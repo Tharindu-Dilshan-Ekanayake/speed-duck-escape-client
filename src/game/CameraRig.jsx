@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 import { Vector3 } from 'three'
 
 import { runtime } from '../state/store'
+import { cameraClip } from './physics'
 
 const LOOK_H = 1.7
 const MIN_D = 4
@@ -86,8 +87,12 @@ export function CameraRig() {
     if (runtime.turn) orbit.current.yaw -= runtime.turn * dt
     const { yaw, pitch, dist } = orbit.current
     _target.set(me.x, me.y + LOOK_H, me.z)
-    const hz = Math.cos(pitch) * dist
-    _desired.set(_target.x + Math.sin(yaw) * hz, _target.y + Math.sin(pitch) * dist, _target.z + Math.cos(yaw) * hz)
+    // Pull the camera in front of any wall between it and the duck.
+    const dx = Math.sin(yaw) * Math.cos(pitch)
+    const dy = Math.sin(pitch)
+    const dz = Math.cos(yaw) * Math.cos(pitch)
+    const d = Math.max(1.5, Math.min(dist, cameraClip(_target.x, _target.y, _target.z, dx, dy, dz, dist) - 0.4))
+    _desired.set(_target.x + dx * d, _target.y + dy * d, _target.z + dz * d)
     const jump = !init.current || camera.position.distanceTo(_desired) > 60
     if (jump) {
       camera.position.copy(_desired)

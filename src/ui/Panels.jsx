@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import { play, setMusic, setSfx } from '../audio/sfx'
 import { send } from '../net/net'
@@ -14,15 +14,24 @@ import {
   formatTime,
   giftWins,
   rebirthLevel,
+  speedStat,
+  stageLevel,
   stageWorld,
   stepMultiplier,
   winMultiplier,
 } from '../shared/gameData'
 import { useGame } from '../state/store'
-import { CloseX, DuckIcon, Lock, Trophy } from './icons'
+import { Bolt, CloseX, DuckIcon, Gear, Gift, Lock, MapIcon, Rebirth, Sneaker, Trophy, WheelIcon } from './icons'
 
-function Panel({ title, children, width }) {
+function Panel({ title, subtitle, icon: Icon, theme = 'blue', children, width }) {
   const close = useGame((s) => s.closePanel)
+  const titleId = useId()
+  const panelRef = useRef()
+  useEffect(() => {
+    const previous = document.activeElement
+    panelRef.current?.querySelector('.close')?.focus({ preventScroll: true })
+    return () => { if (previous?.isConnected) previous.focus?.({ preventScroll: true }) }
+  }, [])
   return (
     <div
       className="shade"
@@ -33,8 +42,38 @@ function Panel({ title, children, width }) {
         }
       }}
     >
-      <div className="panel" style={width ? { width } : undefined}>
-        <h2 className="ol">{title}</h2>
+      <section
+        ref={panelRef}
+        className="panel"
+        data-theme={theme}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={subtitle ? `${titleId}-sub` : undefined}
+        style={width ? { width } : undefined}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.stopPropagation()
+            play('close')
+            close()
+          }
+          if (e.key !== 'Tab') return
+          const buttons = [...e.currentTarget.querySelectorAll('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), [tabindex="0"]')]
+          const first = buttons[0]
+          const last = buttons[buttons.length - 1]
+          if ((e.shiftKey && document.activeElement === first) || (!e.shiftKey && document.activeElement === last)) {
+            e.preventDefault()
+            ;(e.shiftKey ? last : first)?.focus()
+          }
+        }}
+      >
+        <header className="panel-head">
+          <div className="panel-icon" aria-hidden="true">{Icon ? <Icon size={48} /> : <DuckIcon size={48} />}</div>
+          <div className="panel-heading">
+            <h2 id={titleId}>{title}</h2>
+            {subtitle && <p id={`${titleId}-sub`}>{subtitle}</p>}
+          </div>
+        </header>
         <button
           type="button"
           className="close"
@@ -50,7 +89,7 @@ function Panel({ title, children, width }) {
           <CloseX />
         </button>
         <div className="body">{children}</div>
-      </div>
+      </section>
     </div>
   )
 }
@@ -61,32 +100,39 @@ function RebirthPanel({ p }) {
   const k = Math.min(1, p.level / need)
   const ok = p.level >= need
   return (
-    <Panel title="Rebirth" width="min(640px, 94vw)">
-      <div className="row">
-        <span className="ol">Rebirths</span>
-        <span className="gold" style={{ fontFamily: 'var(--title)', fontSize: 34 }}>
-          {p.rebirths}
-        </span>
+    <Panel title="Rebirth" subtitle="A fresh start with bigger rewards." icon={Rebirth} theme="rebirth" width="min(600px, 94vw)">
+      <div className="rebirth-hero">
+        <div className="hero-icon" aria-hidden="true"><Rebirth size={80} /></div>
+        <div>
+          <span className="panel-eyebrow">YOUR NEXT REBIRTH</span>
+          <div className="hero-count">{p.rebirths + 1}</div>
+          <p>{ok ? 'Ready for your next adventure!' : `${Math.max(0, need - p.level)} more levels to unlock`}</p>
+        </div>
       </div>
-      <div className="ol" style={{ fontWeight: 700, fontSize: 20 }}>
-        Level {p.level} / {need}
-      </div>
-      <div className="pbar">
+      <div className="progress-label"><span>Level progress</span><strong>{p.level} / {need}</strong></div>
+      <div className="pbar" role="progressbar" aria-label="Rebirth level progress" aria-valuemin={0} aria-valuemax={need} aria-valuenow={Math.min(p.level, need)}>
         <div style={{ width: `${k * 100}%` }} />
       </div>
-      <div className="row" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-        <div className="ol">
-          Steps: x{stepMultiplier(p.rebirths)} → <span style={{ color: '#7dff8a' }}>x{stepMultiplier(p.rebirths + 1)}</span>
+      <div className="benefit-grid">
+        <div className="benefit">
+          <Sneaker size={34} />
+          <span>Step multiplier</span>
+          <strong>x{stepMultiplier(p.rebirths + 1)}</strong>
+          <small>Current: x{stepMultiplier(p.rebirths)}</small>
         </div>
-        <div className="ol">
-          Wins: x{winMultiplier(p.rebirths)} → <span style={{ color: '#7dff8a' }}>x{winMultiplier(p.rebirths + 1)}</span>
+        <div className="benefit">
+          <Trophy size={34} />
+          <span>Win multiplier</span>
+          <strong>x{winMultiplier(p.rebirths + 1)}</strong>
+          <small>Current: x{winMultiplier(p.rebirths)}</small>
         </div>
-        {p.rebirths + 1 === WORLD2_REBIRTHS && <div className="ol" style={{ color: '#ffe14a' }}>Unlocks WORLD 2!</div>}
-        <div className="r-sub">Resets your Level &amp; Speed. You keep your Wins, Ducks and Treadmills.</div>
       </div>
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
+      {p.rebirths + 1 === WORLD2_REBIRTHS && <div className="unlock-note"><MapIcon size={28} />World 2 unlocks with this rebirth!</div>}
+      <p className="panel-note">Resets your Level &amp; Speed. You keep your Wins, Ducks and Treadmills.</p>
+      <div className="panel-action">
         <button
-          className="gbtn big"
+          type="button"
+          className="gbtn rebirth-action"
           disabled={!ok}
           onClick={() => {
             send('rebirth')
@@ -103,7 +149,7 @@ function RebirthPanel({ p }) {
 /* ---- Ducks inventory ---------------------------------------------------- */
 function DucksPanel({ p }) {
   return (
-    <Panel title="Ducks">
+    <Panel title="Ducks" subtitle="Find your favourite waddling companion." icon={DuckIcon} theme="gifts">
       <div className="r-sub" style={{ marginBottom: 10, fontSize: 16 }}>
         Buy ducks at the red pads in the lobby (walk up &amp; press E). Every duck you own can be equipped here.
       </div>
@@ -151,7 +197,7 @@ function DucksPanel({ p }) {
   )
 }
 
-/* ---- Stages / teleport ------------------------------------------------------ */
+/* ---- Stages: what each one pays and needs (runs always start in the lobby) ---- */
 function StagesPanel({ p }) {
   const tp = (to) => {
     send('tp', { to })
@@ -159,7 +205,10 @@ function StagesPanel({ p }) {
   }
   const w2 = p.rebirths >= WORLD2_REBIRTHS
   return (
-    <Panel title="Stages">
+    <Panel title="Stages" subtitle="Explore the course and your next challenge." icon={MapIcon}>
+      <div className="r-sub" style={{ marginBottom: 10 }}>
+        Every run starts in the lobby. Touch a wins pad to cash out and go back - or keep running to a later stage for far more Wins. Each gate needs a higher Level.
+      </div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
         <button className="gbtn blue" onClick={() => tp('w1')}>
           World 1 Lobby
@@ -181,14 +230,16 @@ function StagesPanel({ p }) {
                 World {stageWorld(n)} • +{formatNum(Math.round(STAGE_WINS[n] * winMultiplier(p.rebirths)))} <Trophy size={16} />
               </div>
             </div>
-            {open ? (
-              <button className="gbtn" onClick={() => tp(n)}>
-                Teleport
-              </button>
-            ) : (
+            {!worldOk ? (
               <span className="ol" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 16 }}>
-                <Lock size={22} /> {worldOk ? 'Reach it first' : `${WORLD2_REBIRTHS} Rebirths`}
+                <Lock size={22} /> {WORLD2_REBIRTHS} Rebirths
               </span>
+            ) : p.level < stageLevel(n) ? (
+              <span className="ol" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 16, color: '#b54d5e' }}>
+                <Lock size={22} /> Level {stageLevel(n)} • Speed {speedStat(stageLevel(n))}
+              </span>
+            ) : (
+              <span className="ol" style={{ fontSize: 16, color: open ? '#238564' : '#a36c1d' }}>{open ? 'Reached' : 'Ready!'}</span>
             )}
           </div>
         )
@@ -198,6 +249,15 @@ function StagesPanel({ p }) {
 }
 
 /* ---- Settings ---------------------------------------------------------- */
+function SettingToggle({ active, label, children, onClick }) {
+  return (
+    <button type="button" className={`toggle ${active ? 'on' : ''}`} aria-pressed={active} aria-label={`${label}: ${children}`} onClick={onClick}>
+      <span className="toggle-dot" aria-hidden="true" />
+      <span>{children}</span>
+    </button>
+  )
+}
+
 function SettingsPanel() {
   const settings = useGame((s) => s.settings)
   const setSetting = useGame((s) => s.setSetting)
@@ -208,48 +268,51 @@ function SettingsPanel() {
     apply?.(v)
   }
   return (
-    <Panel title="Settings" width="min(620px, 94vw)">
+    <Panel title="Settings" subtitle="Make the game feel right for you." icon={Gear} theme="settings" width="min(620px, 94vw)">
+      <div className="panel-section-label">AUDIO</div>
       <div className="row">
         <span className="ol">Music</span>
-        <button className={`toggle ${settings.music ? 'on' : ''}`} onClick={() => toggle('music', setMusic)}>
+        <SettingToggle active={settings.music} label="Music" onClick={() => toggle('music', setMusic)}>
           {settings.music ? 'ON' : 'OFF'}
-        </button>
+        </SettingToggle>
       </div>
       <div className="row">
         <span className="ol">Sound Effects</span>
-        <button className={`toggle ${settings.sfx ? 'on' : ''}`} onClick={() => toggle('sfx', setSfx)}>
+        <SettingToggle active={settings.sfx} label="Sound effects" onClick={() => toggle('sfx', setSfx)}>
           {settings.sfx ? 'ON' : 'OFF'}
-        </button>
+        </SettingToggle>
       </div>
+      <div className="panel-section-label">GAMEPLAY</div>
       <div className="row">
         <span className="ol">Step Popups</span>
-        <button className={`toggle ${settings.popups ? 'on' : ''}`} onClick={() => toggle('popups')}>
+        <SettingToggle active={settings.popups} label="Step popups" onClick={() => toggle('popups')}>
           {settings.popups ? 'ON' : 'OFF'}
-        </button>
+        </SettingToggle>
       </div>
       <div className="row">
         <div>
           <div className="ol">A / D Keys</div>
           <div className="r-sub">Turn the camera as you run, or strafe sideways.</div>
         </div>
-        <button className={`toggle ${settings.turnKeys ? 'on' : ''}`} onClick={() => toggle('turnKeys')}>
+        <SettingToggle active={settings.turnKeys} label="Camera controls" onClick={() => toggle('turnKeys')}>
           {settings.turnKeys ? 'TURN' : 'STRAFE'}
-        </button>
+        </SettingToggle>
       </div>
       <div className="row">
         <div>
           <div className="ol">Graphics</div>
           <div className="r-sub">Low turns off shadows for slower devices.</div>
         </div>
-        <button
-          className={`toggle ${settings.quality === 'high' ? 'on' : ''}`}
+        <SettingToggle
+          active={settings.quality === 'high'}
+          label="Graphics"
           onClick={() => {
             play('click')
             setSetting('quality', settings.quality === 'high' ? 'low' : 'high')
           }}
         >
           {settings.quality === 'high' ? 'HIGH' : 'LOW'}
-        </button>
+        </SettingToggle>
       </div>
       <div className="row" style={{ flexDirection: 'column', alignItems: 'flex-start', fontSize: 16 }}>
         <div className="ol">Controls</div>
@@ -271,20 +334,23 @@ function GiftsPanel({ p }) {
   }, [])
   const ms = session.ms + (Date.now() - sessionAt)
   return (
-    <Panel title="Free Gifts!">
+    <Panel title="Free Gifts" subtitle="Little rewards for every adventure." icon={Gift} theme="gifts" width="min(760px, 94vw)">
       <div className="r-sub" style={{ marginBottom: 10, fontSize: 16 }}>
         Keep playing to unlock gifts. They reset when you rejoin.
       </div>
-      <div className="grid">
+      <div className="grid gift-grid">
         {GIFTS.map((g, i) => {
           const claimed = session.claimed.includes(i)
           const left = g.min * 60000 - ms
+          const ready = !claimed && left <= 0
           const label = g.kind === 'wins' ? `+${formatNum(giftWins(g.f, p.maxStage, p.rebirths))} Wins` : g.label
           return (
-            <div key={i} className={`card ${claimed ? 'owned' : ''}`}>
-              <div style={{ fontSize: 46, lineHeight: 1 }}>{g.kind === 'wins' ? '🏆' : g.kind === 'spins' ? '🎡' : g.kind === 'boost' ? '⚡' : '⭐'}</div>
+            <div key={i} className={`card gift-card ${claimed ? 'claimed' : ready ? 'ready' : ''}`}>
+              <span className="gift-status">{claimed ? 'COLLECTED' : ready ? 'READY' : `${g.min} MIN`}</span>
+              <div className="gift-icon" aria-hidden="true">{g.kind === 'wins' ? <Trophy size={48} /> : g.kind === 'spins' ? <WheelIcon size={48} /> : g.kind === 'boost' ? <Bolt size={48} /> : <Gift size={48} />}</div>
               <div className="t ol">{label}</div>
               <button
+                type="button"
                 className="gbtn"
                 disabled={claimed || left > 0}
                 onClick={() => {
@@ -338,7 +404,7 @@ function WheelPanel({ p }) {
   }, [wheel, seg])
 
   return (
-    <Panel title="Lucky Wheel" width="min(560px, 94vw)">
+    <Panel title="Lucky Wheel" subtitle="Give it a spin and see what you win." icon={WheelIcon} theme="rebirth" width="min(560px, 94vw)">
       <div className="wheel2d">
         <div className="ptr" />
         <div className="disc" style={{ background: bg, transform: `rotate(${angle}deg)`, transition: spinning ? 'transform 4s cubic-bezier(0.12, 0.8, 0.18, 1)' : 'none' }}>

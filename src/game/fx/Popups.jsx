@@ -68,8 +68,10 @@ export function Popups() {
       s.z = p.z + (Math.random() - 0.5) * 1.6
       s.vx = (Math.random() - 0.5) * 0.8
       s.vz = (Math.random() - 0.5) * 0.8
+      const hadMap = !!s.mat.map
       s.mat.map = popupTexture(`+${formatNum(p.amount)}`)
-      s.mat.needsUpdate = true
+      // Only the first map assignment changes the shader; later swaps are just a uniform.
+      if (!hadMap) s.mat.needsUpdate = true
     }
     if (runtime.popups.length > 30) runtime.popups.length = 0
     slots.forEach((s, i) => {

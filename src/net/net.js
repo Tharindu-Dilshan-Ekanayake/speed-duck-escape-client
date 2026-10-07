@@ -189,7 +189,11 @@ function wire(r) {
   })
 }
 
-const remoteEntry = (p) => ({ x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.pos.yaw, tx: p.pos.x, ty: p.pos.y, tz: p.pos.z, tyaw: p.pos.yaw, flags: p.flags || 0, speed: 0 })
+/**
+ * Remote players are drawn from a short buffer of timestamped snapshots, a little in the
+ * past, so their movement is a smooth line instead of a hop every network tick.
+ */
+const remoteEntry = (p) => ({ x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.pos.yaw, flags: p.flags || 0, speed: 0, buf: [{ t: performance.now(), x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.pos.yaw, flags: p.flags || 0 }] })
 
 on('init', (m) => {
   runtime.clockOffset = m.now - Date.now()
@@ -236,15 +240,12 @@ on('lb', (lb) => set({ lb }))
 on('join', (p) => {
   runtime.remote.set(p.sid, remoteEntry(p))
   set({ players: { ...get().players, [p.sid]: p } })
-  get().pushFeed(`${p.name} joined the server!`, 'join')
 })
 on('leave', ({ sid }) => {
   runtime.remote.delete(sid)
   const players = { ...get().players }
-  const gone = players[sid]
   delete players[sid]
   set({ players })
-  if (gone) get().pushFeed(`${gone.name} left.`, 'leave')
 })
 on('appearance', (a) => {
   const prev = get().players[a.sid]
@@ -256,11 +257,19 @@ on('snap', (snap) => {
     if (sid === mySid) continue
     const t = runtime.remote.get(sid)
     if (!t) continue
-    t.tx = x
-    t.ty = y
-    t.tz = z
-    t.tyaw = yaw
-    t.flags = flags
+    const last = t.buf[t.buf.length - 1]
+    if (last && last.x === x && last.y === y && last.z === z && last.yaw === yaw && last.flags === flags) {
+      last.t2 = performance.now() // unchanged: just note it is still there
+      continue
+    }
+    // A teleport / respawn: jump straight there instead of sliding across the map.
+    const now = performance.now()
+    if (last && Math.hypot(x - last.x, z - last.z) > 25) t.buf.length = 0
+    // Starting to move after standing still: begin the slide from "just now", not from
+    // whenever the previous (idle) snapshot arrived.
+    else if (last && now - (last.t2 || last.t) > 120) t.buf.push({ ...last, t: now - 66 })
+    t.buf.push({ t: now, x, y, z, yaw, flags })
+    if (t.buf.length > 20) t.buf.splice(0, t.buf.length - 20)
   }
 })
 

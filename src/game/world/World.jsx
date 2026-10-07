@@ -24,7 +24,11 @@ function Region({ x, zMin, zMax, children, dynamic }) {
     if (!me || !ref.current) return
     const sameWorld = Math.abs(me.x - x) < 1000
     const dz = me.z > zMax ? me.z - zMax : me.z < zMin ? zMin - me.z : 0
-    ref.current.visible = sameWorld && dz < 430
+    // Stages are walled off from each other, so only nearby ones can ever be seen.
+    const vis = sameWorld && dz < 240
+    ref.current.visible = vis
+    // Hidden regions are static: skip their (big) subtree in the per-frame matrix update.
+    ref.current.matrixWorldAutoUpdate = vis
     const n = sameWorld && dz < 160
     if (n !== nearRef.current) {
       nearRef.current = n
@@ -44,11 +48,20 @@ const StageRegion = memo(function StageRegion({ n }) {
   const rebirths = useGame((s) => s.profile?.rebirths || 0)
   const shadows = useGame((s) => s.settings.quality === 'high')
   return (
-    <Region x={S.cx} zMin={S.z1} zMax={S.z0} dynamic={<StageDynamics stage={n} />}>
+    <Region
+      x={S.cx}
+      zMin={S.z1}
+      zMax={S.z0}
+      dynamic={
+        <>
+          <StageDynamics stage={n} />
+          <Props props={S.props} />
+        </>
+      }
+    >
       <StaticChunk boxes={S.boxes} cyls={S.cyls} planes={S.planes} castShadow={shadows} />
       <Nature rocks={S.rocks} trees={S.trees} theme={S.theme} />
       <Signs signs={S.signs} />
-      <Props props={S.props} />
       {S.pad && <PadMarker pad={S.pad} wins={Math.round(STAGE_WINS[n] * winMultiplier(rebirths))} />}
     </Region>
   )

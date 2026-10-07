@@ -5,7 +5,7 @@ import { play } from '../audio/sfx'
 import { useBloxityStore } from '../bloxity/store'
 import { send } from '../net/net'
 import { lobbySpawn, onPad, regionAt, STAGES, treadAt } from '../shared/course'
-import { STEP_DISTANCE, TREADMILL_STEPS, speedStat, treadById, velocityFor } from '../shared/gameData'
+import { STEP_DISTANCE, TREADMILL_STEPS, speedStat, stageLevel, treadById, velocityFor, worldFirst } from '../shared/gameData'
 import { xpPerStep } from '../shared/rules'
 import { runtime, useGame, worldTime } from '../state/store'
 import { dynBox, sinkExpired } from './dynamics'
@@ -15,7 +15,8 @@ import { findPrompt } from './interactions'
 import { buildCollision, createPlayer, placePlayer, stageDyn, stepPlayer } from './physics'
 import Rider, { newMotion } from './Rider'
 
-const SEND_EVERY = 0.1
+/** Position updates per second sent to the server (others see you through these). */
+const SEND_EVERY = 1 / 15
 const round2 = (v) => Math.round(v * 100) / 100
 
 const dynById = new Map()
@@ -156,7 +157,7 @@ export function LocalPlayer() {
       pl,
       { dirX: fx * inp.fwd + rx * inp.right, dirZ: fz * inp.fwd + rz * inp.right, speed, jump: inp.jump },
       dt,
-      { T, Tprev: s.Tprev, now, sinks: runtime.hazards.sinks, dyn: dynNear(reg.stage), killY: S ? S.killY : -25, killCause: killCauseFor(S) },
+      { T, Tprev: s.Tprev, now, sinks: runtime.hazards.sinks, dyn: dynNear(reg.stage), killY: S ? S.killY : -25, killCause: killCauseFor(S), level: prof?.level || 1 },
     )
     s.Tprev = T
 
@@ -165,6 +166,7 @@ export function LocalPlayer() {
       if (e.type === 'jump') {
         play('jump')
         mo.jumpT = 0
+        runtime.bursts.push({ kind: 'dust', x: pl.x, y: pl.y, z: pl.z, at: performance.now() })
       } else if (e.type === 'bounce') {
         play('bounce')
         mo.jumpT = 0
@@ -226,7 +228,7 @@ export function LocalPlayer() {
     const reg2 = regionAt(pl.x, pl.z)
     if (reg2.stage !== s.region.stage || reg2.world !== s.region.world) {
       const prev = s.prevStage
-      const first = reg2.world === 2 ? 11 : 1
+      const first = worldFirst(reg2.world)
       if (reg2.stage > 0) {
         const forward = prev === -1 || prev === reg2.stage - 1 || (prev === 0 && reg2.stage === first)
         s.run = { stage: reg2.stage, sent: !forward }
@@ -239,6 +241,15 @@ export function LocalPlayer() {
     if (S2 && s.run && !s.run.sent && pl.grounded && onPad(S2.n, pl.x, pl.z, 0.1)) {
       s.run.sent = true
       send('pad', { stage: S2.n })
+    }
+
+    // ---- Locked gate ahead? Tell the player what they need. ----
+    const nextN = reg2.stage === 0 ? worldFirst(reg2.world) : reg2.stage + 1
+    const G = STAGES[nextN]?.world === reg2.world ? STAGES[nextN].gate : null
+    if (G && prof && prof.level < G.req && Math.abs(pl.x - G.x) < G.w / 2 + 1 && pl.z - G.z < 3.5 && pl.z - G.z > -1.6 && now - (s.gateHint || 0) > 4) {
+      s.gateHint = now
+      g.showBig({ kind: 'warn', text: `LEVEL ${stageLevel(nextN)} NEEDED`, sub: 'Train on the treadmills to level up!', ms: 1800 })
+      play('error')
     }
 
     // ---- Steps: walking and treadmills both "waddle" ----

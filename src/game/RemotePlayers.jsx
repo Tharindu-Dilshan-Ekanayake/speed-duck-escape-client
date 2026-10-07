@@ -35,6 +35,9 @@ function tagMaterial(name, level, wins, rebirths) {
   return new SpriteMaterial({ map: t, transparent: true, depthWrite: false })
 }
 
+/** How far in the past remote players are drawn - a few snapshots of slack for jitter. */
+const INTERP_MS = 160
+
 const RemoteRider = memo(function RemoteRider({ sid, player }) {
   const group = useRef()
   const motion = useRef(newMotion())
@@ -47,14 +50,40 @@ const RemoteRider = memo(function RemoteRider({ sid, player }) {
     const dt = Math.min(dtRaw, 0.05)
     const r = runtime.remote.get(sid)
     if (!r || !group.current) return
-    const far = Math.hypot(r.tx - r.x, r.tz - r.z) > 25
-    const k = far ? 1 : 1 - Math.pow(0.0005, dt)
-    r.x += (r.tx - r.x) * k
-    r.y += (r.ty - r.y) * k
-    r.z += (r.tz - r.z) * k
+    // Snapshot interpolation: draw them INTERP_MS in the past, between two snapshots.
+    const buf = r.buf
+    const renderT = performance.now() - INTERP_MS
+    while (buf.length > 2 && buf[1].t <= renderT) buf.shift()
+    const a = buf[0]
+    const b = buf[1] || a
+    const far = Math.hypot(a.x - r.x, a.z - r.z) > 25
+    let vx = 0
+    let vz = 0
+    if (b !== a && renderT > a.t) {
+      const span = Math.max(1, b.t - a.t)
+      const f = Math.min(1, (renderT - a.t) / span)
+      r.x = a.x + (b.x - a.x) * f
+      r.y = a.y + (b.y - a.y) * f
+      r.z = a.z + (b.z - a.z) * f
+      let dy = b.yaw - a.yaw
+      dy = Math.atan2(Math.sin(dy), Math.cos(dy))
+      r.tyaw = a.yaw + dy * f
+      r.flags = f < 0.5 ? a.flags : b.flags
+      if (f < 1) {
+        vx = ((b.x - a.x) / span) * 1000
+        vz = ((b.z - a.z) / span) * 1000
+      }
+    } else {
+      r.x = a.x
+      r.y = a.y
+      r.z = a.z
+      r.tyaw = a.yaw
+      r.flags = a.flags
+    }
+    // Facing turns smoothly on top of that.
     let d = r.tyaw - r.yaw
     d = Math.atan2(Math.sin(d), Math.cos(d))
-    r.yaw += d * (1 - Math.pow(0.0001, dt))
+    r.yaw = far ? r.tyaw : r.yaw + d * (1 - Math.pow(0.0005, dt))
     group.current.position.set(r.x, r.y, r.z)
     group.current.rotation.y = r.yaw
     // Visibility: only nearby players in the same world are drawn.
@@ -62,7 +91,7 @@ const RemoteRider = memo(function RemoteRider({ sid, player }) {
     group.current.visible = !me || Math.hypot(me.x - r.x, me.z - r.z) < 260
 
     const p = prev.current
-    const spd = dt > 0 ? Math.hypot(r.x - p.x, r.z - p.z) / dt : 0
+    const spd = Math.hypot(vx, vz)
     p.x = r.x
     p.z = r.z
     const mo = motion.current
@@ -78,7 +107,8 @@ const RemoteRider = memo(function RemoteRider({ sid, player }) {
     mo.time += dt
     mo.grounded = grounded
     mo.vy = r.flags & 4 ? 6 : grounded ? 0 : -6
-    mo.ratio = tread ? 1 : Math.min(1, (mo.ratio * 0.8 + (spd / 9) * 0.2))
+    // Waddle speed eases toward the real speed (frame-rate independent).
+    mo.ratio += ((tread ? 1 : Math.min(1, spd / 9)) - mo.ratio) * (1 - Math.pow(0.002, dt))
     mo.jumpT += dt
     mo.landT += dt
   })
