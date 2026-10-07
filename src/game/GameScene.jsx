@@ -44,7 +44,7 @@ function Environment() {
     const pmrem = new PMREMGenerator(gl)
     const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
     scene.environment = env
-    scene.environmentIntensity = 0.4
+    scene.environmentIntensity = 0.2
     return () => {
       scene.environment = null
       env.dispose()
@@ -67,7 +67,8 @@ export function GameScene() {
       onCreated={({ gl, scene }) => {
         if (import.meta.env.DEV) Object.assign(runtime, { gl, scene })
         gl.toneMapping = NeutralToneMapping
-        gl.toneMappingExposure = 1.08
+        // Roblox-style grade: slightly darker exposure keeps colours rich instead of washed out.
+        gl.toneMappingExposure = 0.9
       }}
     >
       <Environment />
