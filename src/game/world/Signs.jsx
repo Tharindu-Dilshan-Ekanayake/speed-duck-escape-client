@@ -1,10 +1,11 @@
 import { useFrame } from '@react-three/fiber'
 import { memo, useMemo, useRef } from 'react'
-import { CylinderGeometry, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, TorusGeometry } from 'three'
+import { CylinderGeometry, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, TorusGeometry, Vector3 } from 'three'
 
 import { textTexture } from '../textures'
 
 const PLANE = new PlaneGeometry(1, 1)
+const _p = new Vector3()
 const matCache = new Map()
 function textMaterial(text, style, px) {
   const k = `${style}|${px}|${text}`
@@ -21,11 +22,18 @@ function textMaterial(text, style, px) {
 export const Label = memo(function Label({ text, style = 'label', height = 1, position, rotation = [0, 0, 0], px = 96, billboard = false }) {
   const mat = textMaterial(text, style, px)
   const ref = useRef()
-  useFrame(({ camera }) => {
-    if (billboard && ref.current) ref.current.quaternion.copy(camera.quaternion)
-  })
   const h = height * 1.5
-  return <mesh ref={ref} geometry={PLANE} material={mat} position={position} rotation={rotation} scale={[h * mat.userData.aspect, h, 1]} renderOrder={5} />
+  const aspect = mat.userData.aspect
+  useFrame(({ camera }) => {
+    const m = ref.current
+    if (!billboard || !m) return
+    m.quaternion.copy(camera.quaternion)
+    // Shrink when the camera is close so labels never swamp the screen.
+    m.getWorldPosition(_p)
+    const k = Math.min(1, Math.max(0.4, camera.position.distanceTo(_p) / 16))
+    m.scale.set(h * aspect * k, h * k, 1)
+  })
+  return <mesh ref={ref} geometry={PLANE} material={mat} position={position} rotation={rotation} scale={[h * aspect, h, 1]} renderOrder={5} />
 })
 
 export const Signs = memo(function Signs({ signs }) {

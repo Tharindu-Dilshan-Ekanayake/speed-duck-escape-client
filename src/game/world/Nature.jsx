@@ -17,7 +17,27 @@ function rockGeo(variant, theme) {
 let trees = null
 let flowers = null
 const vcMat = new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.85 })
-const canopyMat = new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.8 })
+const canopyMaterials = new Map()
+function canopyMaterial(theme) {
+  const night = theme.sky === 'night' || theme.sky === 'dusk'
+  const warm = theme.sky === 'ember' || theme.sky === 'golden' || theme.sky === 'sunset'
+  const key = night ? 'night' : warm ? 'warm' : 'day'
+  if (!canopyMaterials.has(key)) {
+    const palette = {
+      night: { color: '#9b83ff', intensity: 0.2 },
+      warm: { color: '#ffc077', intensity: 0.12 },
+      day: { color: '#ffffff', intensity: 0.035 },
+    }[key]
+    canopyMaterials.set(key, new MeshStandardMaterial({
+      vertexColors: true,
+      flatShading: true,
+      roughness: 0.72,
+      emissive: palette.color,
+      emissiveIntensity: palette.intensity,
+    }))
+  }
+  return canopyMaterials.get(key)
+}
 const FLOWER_COLORS = ['#ff5ad8', '#ffe14a', '#b46bff', '#ff6a6a']
 const dummy = new Object3D()
 const tmpColor = new Color()
@@ -63,6 +83,7 @@ export const Nature = memo(function Nature({ rocks = [], trees: treeList = [], f
   const byVariant = useMemo(() => [0, 1, 2].map((v) => rocks.filter((r) => r.v === v)), [rocks])
   const canopyColor = useMemo(() => (t) => theme.canopy[t.c % theme.canopy.length], [theme])
   const flowerColor = useMemo(() => (f) => FLOWER_COLORS[f.c % FLOWER_COLORS.length], [])
+  const canopyMat = canopyMaterial(theme)
   return (
     <>
       {byVariant.map((list, v) => (

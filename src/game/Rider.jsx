@@ -42,11 +42,9 @@ export const Rider = memo(function Rider({ duck, equipped, proportions, motionRe
   return (
     <group>
       <group ref={spin}>
-        <group scale={1.18}>
-          <Duck id={duck} motionRef={motionRef} />
-        </group>
+        <Duck id={duck} motionRef={motionRef} />
         {/* The rider sits behind the neck, legs hanging down both sides of it. */}
-        <group position={[0, 0.98, 0.1]}>
+        <group position={[0, 0.98, -0.12]}>
           <Avatar equipped={equipped} proportions={proportions} motionRef={motionRef} onReady={onReady} />
         </group>
       </group>
