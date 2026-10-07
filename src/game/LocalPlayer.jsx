@@ -5,9 +5,9 @@ import { play } from '../audio/sfx'
 import { useBloxityStore } from '../bloxity/store'
 import { send } from '../net/net'
 import { lobbySpawn, onPad, regionAt, STAGES, treadAt } from '../shared/course'
-import { STEP_DISTANCE, TREADMILL_STEPS, speedStat, treadById, velocityFor } from '../shared/gameData'
+import { STEP_DISTANCE, TREADMILL_STEPS, speedStat, stageLevel, treadById, velocityFor, worldFirst } from '../shared/gameData'
 import { xpPerStep } from '../shared/rules'
-import { runtime, useGame, worldTime } from '../state/store'
+import { runtime, serverNow, useGame, worldTime } from '../state/store'
 import { dynBox, sinkExpired } from './dynamics'
 import { footprintPool, FootprintTrail } from './footprints'
 import { readInput, installKeyboard } from './input'
@@ -15,7 +15,13 @@ import { findPrompt } from './interactions'
 import { buildCollision, createPlayer, placePlayer, stageDyn, stepPlayer } from './physics'
 import Rider, { newMotion } from './Rider'
 
-const SEND_EVERY = 0.1
+/** Position updates per second sent to the server (others see you through these). */
+const SEND_EVERY = 1 / 15
+/**
+ * Physics runs in fixed 120 Hz steps and the duck is drawn between the last two steps.
+ * Frame times always wobble a little; this keeps the motion perfectly even anyway.
+ */
+const FIXED = 1 / 120
 const round2 = (v) => Math.round(v * 100) / 100
 
 const dynById = new Map()
@@ -105,12 +111,21 @@ export function LocalPlayer() {
     const prof = g.profile
     const mo = motion.current
     let teleported = false
+    // Snap the drawn position to the physics one (after a teleport / respawn).
+    const snapView = () => {
+      s.px = pl.x
+      s.py = pl.y
+      s.pz = pl.z
+      s.acc = 0
+    }
+    if (s.px === undefined) snapView()
 
     if (runtime.pendingTeleport) {
       const t = runtime.pendingTeleport
       teleported = true
       runtime.pendingTeleport = null
       placePlayer(pl, t)
+      snapView()
       resetHazards()
       s.facing = t.yaw ?? Math.PI
       s.prevStage = -1
@@ -142,6 +157,7 @@ export function LocalPlayer() {
       // Falling / getting caught in a stage sends you back to the lobby.
       const spawn = lobbySpawn(reg.world)
       placePlayer(pl, spawn)
+      snapView()
       resetHazards()
       s.facing = spawn.yaw
       s.lastX = pl.x
@@ -152,19 +168,28 @@ export function LocalPlayer() {
       if (cause === 'wave') g.toast('The tsunami got you! Run faster - level up for more Speed.', 'warn')
     }
 
-    const events = stepPlayer(
-      pl,
-      { dirX: fx * inp.fwd + rx * inp.right, dirZ: fz * inp.fwd + rz * inp.right, speed, jump: inp.jump },
-      dt,
-      { T, Tprev: s.Tprev, now, sinks: runtime.hazards.sinks, dyn: dynNear(reg.stage), killY: S ? S.killY : -25, killCause: killCauseFor(S) },
-    )
-    s.Tprev = T
+    const ctl = { dirX: fx * inp.fwd + rx * inp.right, dirZ: fz * inp.fwd + rz * inp.right, speed, jump: inp.jump }
+    const env = { T, Tprev: s.Tprev, now, sinks: runtime.hazards.sinks, dyn: dynNear(reg.stage), killY: S ? S.killY : -25, killCause: killCauseFor(S), level: prof?.level || 1 }
+    const events = []
+    s.acc = Math.min((s.acc || 0) + dt, 0.1)
+    while (s.acc >= FIXED) {
+      s.acc -= FIXED
+      s.px = pl.x
+      s.py = pl.y
+      s.pz = pl.z
+      env.T = T - s.acc
+      env.Tprev = s.Tprev ?? env.T - FIXED
+      for (const e of stepPlayer(pl, ctl, FIXED, env)) events.push(e)
+      s.Tprev = env.T
+      if (events.some((e) => e.type === 'kill')) break
+    }
 
     let died = false
     for (const e of events) {
       if (e.type === 'jump') {
         play('jump')
         mo.jumpT = 0
+        runtime.bursts.push({ kind: 'dust', x: pl.x, y: pl.y, z: pl.z, at: performance.now() })
       } else if (e.type === 'bounce') {
         play('bounce')
         mo.jumpT = 0
@@ -226,7 +251,7 @@ export function LocalPlayer() {
     const reg2 = regionAt(pl.x, pl.z)
     if (reg2.stage !== s.region.stage || reg2.world !== s.region.world) {
       const prev = s.prevStage
-      const first = reg2.world === 2 ? 11 : 1
+      const first = worldFirst(reg2.world)
       if (reg2.stage > 0) {
         const forward = prev === -1 || prev === reg2.stage - 1 || (prev === 0 && reg2.stage === first)
         s.run = { stage: reg2.stage, sent: !forward }
@@ -239,6 +264,15 @@ export function LocalPlayer() {
     if (S2 && s.run && !s.run.sent && pl.grounded && onPad(S2.n, pl.x, pl.z, 0.1)) {
       s.run.sent = true
       send('pad', { stage: S2.n })
+    }
+
+    // ---- Locked gate ahead? Tell the player what they need. ----
+    const nextN = reg2.stage === 0 ? worldFirst(reg2.world) : reg2.stage + 1
+    const G = STAGES[nextN]?.world === reg2.world ? STAGES[nextN].gate : null
+    if (G && prof && prof.level < G.req && Math.abs(pl.x - G.x) < G.w / 2 + 1 && pl.z - G.z < 3.5 && pl.z - G.z > -1.6 && now - (s.gateHint || 0) > 4) {
+      s.gateHint = now
+      g.showBig({ kind: 'warn', text: `LEVEL ${stageLevel(nextN)} NEEDED`, sub: 'Train on the treadmills to level up!', ms: 1800 })
+      play('error')
     }
 
     // ---- Steps: walking and treadmills both "waddle" ----
@@ -288,15 +322,24 @@ export function LocalPlayer() {
       supportPose: supportBox ? { x: (supportBox.minX + supportBox.maxX) / 2, y: (supportBox.minY + supportBox.maxY) / 2, z: (supportBox.minZ + supportBox.maxZ) / 2 } : null,
     })
     mo.time += dt
-    mo.ratio = onTread ? 1 : Math.min(1, hs / Math.max(4, speed * 0.85))
+    // Ease the waddle amount and advance the stride phase smoothly.
+    const ratioTarget = onTread ? 1 : Math.min(1, hs / Math.max(4, speed * 0.85))
+    mo.ratio += (ratioTarget - mo.ratio) * (1 - Math.exp(-dt * 12))
+    mo.phase += dt * (7 + mo.ratio * 7)
     mo.grounded = pl.grounded || pl.coyote > 0.08
     mo.vy = pl.vy
     mo.jumpT += dt
     mo.landT += dt
     runtime.speedNow = hs
     runtime.onTread = onTread
+    // Draw between the last two physics steps.
+    const alpha = Math.min(1, (s.acc || 0) / FIXED)
+    const view = runtime.view || (runtime.view = { x: 0, y: 0, z: 0 })
+    view.x = s.px + (pl.x - s.px) * alpha
+    view.y = s.py + (pl.y - s.py) * alpha
+    view.z = s.pz + (pl.z - s.pz) * alpha
     if (group.current) {
-      group.current.position.set(pl.x, pl.y, pl.z)
+      group.current.position.set(view.x, view.y, view.z)
       group.current.rotation.y = s.facing
     }
 
@@ -313,7 +356,8 @@ export function LocalPlayer() {
     if (s.sendT >= SEND_EVERY) {
       s.sendT = 0
       const flags = (hs > 0.3 ? 1 : 0) | (pl.grounded ? 2 : 0) | (pl.vy > 0.5 ? 4 : 0) | (onTread ? 8 : 0) | (pl.stun > 0 ? 16 : 0)
-      send('pos', [round2(pl.x), round2(pl.y), round2(pl.z), round2(s.facing), flags])
+      // Stamped with the shared server clock so others can replay it with even timing.
+      send('pos', [round2(pl.x), round2(pl.y), round2(pl.z), round2(s.facing), flags, Math.round(serverNow())])
     }
   })
 

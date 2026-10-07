@@ -25,8 +25,8 @@ function cylGeo(x, y, z, r, h, seg = 28) {
 function cylinderParts(c) {
   const out = []
   if (c.island) {
-    out.push({ c: '#22dd22', m: 'stud', geo: cylGeo(c.x, c.top - 0.35, c.z, c.r, 0.7, 36) })
-    out.push({ c: '#d9573f', m: 'stud', geo: cylGeo(c.x, c.top - 0.7 - (c.h - 0.7) / 2, c.z, c.r - 0.15, c.h - 0.7, 36) })
+    out.push({ c: '#4cc63a', m: 'stud', geo: cylGeo(c.x, c.top - 0.35, c.z, c.r, 0.7, 36) })
+    out.push({ c: '#b5743f', m: 'stud', geo: cylGeo(c.x, c.top - 0.7 - (c.h - 0.7) / 2, c.z, c.r - 0.15, c.h - 0.7, 36) })
   } else if (c.mushroom) {
     out.push({ c: c.c, m: 'smooth', geo: cylGeo(c.x, c.top - c.h / 2, c.z, c.r, c.h, 36) })
     const dome = new SphereGeometry(c.r, 32, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2)

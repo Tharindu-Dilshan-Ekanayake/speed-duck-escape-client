@@ -10,8 +10,8 @@ export const DUCK_BODY = (() => {
     [0.14, 0.84, 0.55, 0.42], [0.43, 0.98, 0.36, 0.39],
     [0.66, 1.13, 0.16, 0.24], [0.75, 1.20, 0.012, 0.012],
   ]
-  const rings = 64
-  const sides = 32
+  const rings = 40
+  const sides = 26
   const vertices = []
   const indices = []
   for (let i = 0; i <= rings; i += 1) {

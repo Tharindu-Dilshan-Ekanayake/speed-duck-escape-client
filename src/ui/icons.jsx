@@ -1,8 +1,9 @@
+import { memo } from 'react'
 /** Inline SVG icons drawn in the chunky Roblox-sim style (thick dark outlines). */
 
 const S = { stroke: '#1a1030', strokeWidth: 5, strokeLinejoin: 'round', strokeLinecap: 'round' }
 
-export const Trophy = ({ size = 64 }) => (
+const TrophySvg = ({ size = 64 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100">
     <defs>
       <linearGradient id="tg" x1="0" y1="0" x2="0" y2="1">
@@ -19,17 +20,26 @@ export const Trophy = ({ size = 64 }) => (
   </svg>
 )
 
-export const Rebirth = ({ size = 56 }) => (
+/** Grey medallion with a red (top) and white (bottom) arrow chasing each other round. */
+const RebirthSvg = ({ size = 56 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100">
-    <circle cx="50" cy="50" r="40" fill="#fff" {...S} />
-    <path d="M50 18a32 32 0 0 1 30 20" fill="none" stroke="#ff3a7a" strokeWidth="12" strokeLinecap="round" />
-    <path d="M50 82a32 32 0 0 1-30-20" fill="none" stroke="#2a7bff" strokeWidth="12" strokeLinecap="round" />
-    <path d="M84 30l-2 16-14-6z" fill="#ff3a7a" />
-    <path d="M16 70l2-16 14 6z" fill="#2a7bff" />
+    <circle cx="50" cy="50" r="42" fill="#8d96a3" stroke="#1a1030" strokeWidth="5" />
+    <circle cx="50" cy="50" r="33" fill="#6c7480" />
+    <g transform="rotate(-25 50 50)">
+      {/* Red arc over the top, arrowhead on the right. */}
+      <path d="M22 50a28 28 0 0 1 52-14" fill="none" stroke="#1a1030" strokeWidth="17" strokeLinecap="round" />
+      <path d="M22 50a28 28 0 0 1 52-14" fill="none" stroke="#e8354a" strokeWidth="10" strokeLinecap="round" />
+      <path d="M86 30l-6 24-20-14z" fill="#e8354a" stroke="#1a1030" strokeWidth="4" strokeLinejoin="round" />
+      {/* White arc under the bottom, arrowhead on the left. */}
+      <path d="M78 50a28 28 0 0 1-52 14" fill="none" stroke="#1a1030" strokeWidth="17" strokeLinecap="round" />
+      <path d="M78 50a28 28 0 0 1-52 14" fill="none" stroke="#ffffff" strokeWidth="10" strokeLinecap="round" />
+      <path d="M14 70l6-24 20 14z" fill="#ffffff" stroke="#1a1030" strokeWidth="4" strokeLinejoin="round" />
+    </g>
+    <path d="M30 28a30 30 0 0 1 20-8" fill="none" stroke="#fff" strokeOpacity="0.45" strokeWidth="4" strokeLinecap="round" />
   </svg>
 )
 
-export const Gear = ({ size = 56 }) => (
+const GearSvg = ({ size = 56 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100">
     <path
       d="M43 8h14l3 12 9 4 11-6 10 10-6 11 4 9 12 3v14l-12 3-4 9 6 11-10 10-11-6-9 4-3 12H43l-3-12-9-4-11 6-10-10 6-11-4-9-12-3V43l12-3 4-9-6-11 10-10 11 6 9-4z"
@@ -40,7 +50,7 @@ export const Gear = ({ size = 56 }) => (
   </svg>
 )
 
-export const Gift = ({ size = 56 }) => (
+const GiftSvg = ({ size = 56 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100">
     <path d="M14 40h72v50H14z" fill="#2fd5ff" {...S} />
     <path d="M10 28h80v16H10z" fill="#ff3a6a" {...S} />
@@ -49,7 +59,7 @@ export const Gift = ({ size = 56 }) => (
   </svg>
 )
 
-export const People = ({ size = 56 }) => (
+const PeopleSvg = ({ size = 56 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100">
     <rect x="44" y="34" width="44" height="40" rx="12" fill="#ffcf2a" {...S} />
     <rect x="12" y="26" width="48" height="46" rx="14" fill="#ffe14a" {...S} />
@@ -60,7 +70,7 @@ export const People = ({ size = 56 }) => (
   </svg>
 )
 
-export const DuckIcon = ({ size = 56, body = '#ffd21a', beak = '#ff8a1a', glow }) => (
+const DuckIconSvg = ({ size = 56, body = '#ffd21a', beak = '#ff8a1a', glow }) => (
   <svg width={size} height={size} viewBox="0 0 100 100" style={glow ? { filter: `drop-shadow(0 0 6px ${glow})` } : undefined}>
     <ellipse cx="46" cy="64" rx="36" ry="24" fill={body} {...S} />
     <circle cx="64" cy="34" r="20" fill={body} {...S} />
@@ -71,7 +81,7 @@ export const DuckIcon = ({ size = 56, body = '#ffd21a', beak = '#ff8a1a', glow }
   </svg>
 )
 
-export const MapIcon = ({ size = 56 }) => (
+const MapIconSvg = ({ size = 56 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100">
     <path d="M10 22l26-10 28 10 26-10v66l-26 10-28-10-26 10z" fill="#7dff8a" {...S} />
     <path d="M36 12v66M64 22v66" {...S} fill="none" />
@@ -79,7 +89,7 @@ export const MapIcon = ({ size = 56 }) => (
   </svg>
 )
 
-export const WheelIcon = ({ size = 56 }) => (
+const WheelIconSvg = ({ size = 56 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100">
     {['#ff3a3a', '#ffd21a', '#3dff5a', '#29c8ff', '#b46bff', '#ff8a1a'].map((c, i) => {
       const a0 = (i / 6) * Math.PI * 2
@@ -91,7 +101,7 @@ export const WheelIcon = ({ size = 56 }) => (
   </svg>
 )
 
-export const Sneaker = ({ size = 40 }) => (
+const SneakerSvg = ({ size = 40 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100">
     <path d="M10 58c0-10 6-30 22-30 8 10 14 12 26 14 18 2 32 8 32 22v8H10z" fill="#ff3a4a" {...S} />
     <path d="M10 72h80v10H10z" fill="#fff" {...S} />
@@ -99,21 +109,35 @@ export const Sneaker = ({ size = 40 }) => (
   </svg>
 )
 
-export const Bolt = ({ size = 40 }) => (
+const BoltSvg = ({ size = 40 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100">
     <path d="M58 6L18 56h26l-8 38 46-54H54z" fill="#ffe14a" {...S} />
   </svg>
 )
 
-export const CloseX = ({ size = 28 }) => (
+const CloseXSvg = ({ size = 28 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100">
     <path d="M22 22l56 56M78 22L22 78" stroke="#fff" strokeWidth="16" strokeLinecap="round" />
   </svg>
 )
 
-export const Lock = ({ size = 28 }) => (
+const LockSvg = ({ size = 28 }) => (
   <svg width={size} height={size} viewBox="0 0 100 100">
     <path d="M30 44V32a20 20 0 0 1 40 0v12" fill="none" {...S} strokeWidth="9" />
     <rect x="20" y="44" width="60" height="44" rx="10" fill="#ffd21a" {...S} />
   </svg>
 )
+
+// Memoised: the HUD re-renders often and these SVGs never change for the same props.
+export const Trophy = memo(TrophySvg)
+export const Rebirth = memo(RebirthSvg)
+export const Gear = memo(GearSvg)
+export const Gift = memo(GiftSvg)
+export const People = memo(PeopleSvg)
+export const DuckIcon = memo(DuckIconSvg)
+export const MapIcon = memo(MapIconSvg)
+export const WheelIcon = memo(WheelIconSvg)
+export const Sneaker = memo(SneakerSvg)
+export const Bolt = memo(BoltSvg)
+export const CloseX = memo(CloseXSvg)
+export const Lock = memo(LockSvg)

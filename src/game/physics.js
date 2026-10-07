@@ -60,6 +60,9 @@ function boxItem(b) {
     k: b.k,
     cv: b.cv || null,
     power: b.power || 0,
+    req: b.req || 0,
+    // Visible, sizeable walls block the camera (not invisible bounds or thin decor).
+    cam: b.m !== 'invisible' && b.k !== 'gate' && b.h > 3,
   }
 }
 
@@ -97,7 +100,42 @@ export function buildCollision() {
   }
 }
 
-function query(minX, maxX, minZ, maxZ, solids, kills) {
+/**
+ * Camera collision: how far (0..maxDist) a ray from (ox,oy,oz) along unit (dx,dy,dz) gets
+ * before it hits a tall static wall. Keeps the camera from ending up behind a stage wall.
+ */
+const _cam = []
+export function cameraClip(ox, oy, oz, dx, dy, dz, maxDist) {
+  _cam.length = 0
+  const ex = ox + dx * maxDist
+  const ez = oz + dz * maxDist
+  query(Math.min(ox, ex), Math.max(ox, ex), Math.min(oz, ez), Math.max(oz, ez), _cam, _cam)
+  let best = maxDist
+  for (const b of _cam) {
+    if (b.type !== 'box' || !b.cam) continue
+    // Slab test.
+    let t0 = 0
+    let t1 = best
+    let hit = true
+    for (const [o, d, lo, hi] of [[ox, dx, b.minX, b.maxX], [oy, dy, b.minY, b.maxY], [oz, dz, b.minZ, b.maxZ]]) {
+      if (Math.abs(d) < 1e-6) {
+        if (o < lo || o > hi) hit = false
+        continue
+      }
+      let a = (lo - o) / d
+      let c = (hi - o) / d
+      if (a > c) [a, c] = [c, a]
+      t0 = Math.max(t0, a)
+      t1 = Math.min(t1, c)
+      if (t0 > t1) hit = false
+    }
+    // Ignore boxes the ray starts inside (e.g. standing in a doorway).
+    if (hit && t0 > 0.05) best = Math.min(best, t0)
+  }
+  return best
+}
+
+function query(minX, maxX, minZ, maxZ, solids, kills, level = 1) {
   stamp += 1
   const x0 = Math.floor(minX / CELL)
   const x1 = Math.floor(maxX / CELL)
@@ -112,6 +150,8 @@ function query(minX, maxX, minZ, maxZ, solids, kills) {
         it.stamp = stamp
         if (it.maxX < minX || it.minX > maxX || it.maxZ < minZ || it.minZ > maxZ) continue
         if (it.k === 'kill') kills.push(it)
+        // Stage-gate force fields only stop players below the required level.
+        else if (it.k === 'gate' && level >= it.req) continue
         else solids.push(it)
       }
     }
@@ -350,7 +390,7 @@ export function stepPlayer(pl, ctl, dt, env) {
   _solids.length = 0
   _kills.length = 0
   const pad = travel + 2
-  query(pl.x - R - pad, pl.x + R + pad, pl.z - R - pad, pl.z + R + pad, _solids, _kills)
+  query(pl.x - R - pad, pl.x + R + pad, pl.z - R - pad, pl.z + R + pad, _solids, _kills, env.level || 1)
   const now = env.now
   for (const d of env.dyn) {
     if (d.t === 'move' || d.t === 'blink' || d.t === 'sink') {

@@ -4,7 +4,7 @@ import { play } from '../audio/sfx'
 import { getSDK, safeCall } from '../bloxity/sdk'
 import { getBloxityState, useBloxityStore } from '../bloxity/store'
 import { DUCKS, GAME_ID, ROOM_NAME, WHEEL, formatNum } from '../shared/gameData'
-import { runtime, useGame } from '../state/store'
+import { runtime, serverNow, useGame } from '../state/store'
 import { createOfflineRoom } from './offline'
 
 /**
@@ -189,7 +189,11 @@ function wire(r) {
   })
 }
 
-const remoteEntry = (p) => ({ x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.pos.yaw, tx: p.pos.x, ty: p.pos.y, tz: p.pos.z, tyaw: p.pos.yaw, flags: p.flags || 0, speed: 0 })
+/**
+ * Remote players are drawn from a short buffer of timestamped snapshots, a little in the
+ * past, so their movement is a smooth line instead of a hop every network tick.
+ */
+const remoteEntry = (p) => ({ x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.pos.yaw, flags: p.flags || 0, speed: 0, buf: [{ t: p.pos.t || serverNow() - 300, x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.pos.yaw, flags: p.flags || 0 }] })
 
 on('init', (m) => {
   runtime.clockOffset = m.now - Date.now()
@@ -220,9 +224,16 @@ on('init', (m) => {
   syncClock()
 })
 
+let bestRtt = Infinity
 on('pong', (m) => {
   const rtt = Date.now() - m.t
-  runtime.clockOffset = m.now + rtt / 2 - Date.now()
+  const offset = m.now + rtt / 2 - Date.now()
+  // Trust low-latency samples most, and ease toward them: a sudden clock jump would make
+  // moving platforms and other players visibly skip.
+  bestRtt = Math.min(bestRtt * 1.05, rtt)
+  if (rtt > bestRtt * 1.5 + 20) return
+  const d = offset - runtime.clockOffset
+  runtime.clockOffset += Math.abs(d) > 1000 ? d : d * 0.25
 })
 
 on('profile', (profile) => set({ profile, statsAt: Date.now() }))
@@ -236,15 +247,12 @@ on('lb', (lb) => set({ lb }))
 on('join', (p) => {
   runtime.remote.set(p.sid, remoteEntry(p))
   set({ players: { ...get().players, [p.sid]: p } })
-  get().pushFeed(`${p.name} joined the server!`, 'join')
 })
 on('leave', ({ sid }) => {
   runtime.remote.delete(sid)
   const players = { ...get().players }
-  const gone = players[sid]
   delete players[sid]
   set({ players })
-  if (gone) get().pushFeed(`${gone.name} left.`, 'leave')
 })
 on('appearance', (a) => {
   const prev = get().players[a.sid]
@@ -252,15 +260,19 @@ on('appearance', (a) => {
 })
 on('snap', (snap) => {
   const mySid = get().sid
-  for (const [sid, x, y, z, yaw, flags] of snap) {
+  for (const [sid, x, y, z, yaw, flags, sentAt] of snap) {
     if (sid === mySid) continue
     const t = runtime.remote.get(sid)
     if (!t) continue
-    t.tx = x
-    t.ty = y
-    t.tz = z
-    t.tyaw = yaw
-    t.flags = flags
+    // Timed by the sender's (server-synced) clock, so the replay is evenly spaced no
+    // matter how unevenly the packets arrive.
+    const at = Number.isFinite(sentAt) ? sentAt : serverNow()
+    const last = t.buf[t.buf.length - 1]
+    if (last && at <= last.t) continue
+    // A teleport / respawn: jump straight there instead of sliding across the map.
+    if (last && Math.hypot(x - last.x, z - last.z) > 25) t.buf.length = 0
+    t.buf.push({ t: at, x, y, z, yaw, flags })
+    if (t.buf.length > 30) t.buf.splice(0, t.buf.length - 30)
   }
 })
 

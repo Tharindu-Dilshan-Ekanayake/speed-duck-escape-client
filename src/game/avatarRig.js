@@ -397,43 +397,49 @@ export function poseRider(rig, motion) {
   if (!rig?.skeleton || !motion) return
   const { time = 0, ratio = 0, grounded = true, jumpT = 9 } = motion
   rig.root.position.y = rig.rootRestY
-
-  // Seated astride the duck like a rider: thighs forward along its back and spread
-  // around its body, shins hanging down its sides, feet gently bobbing with the waddle.
-  const kick = grounded ? Math.sin(time * (7 + ratio * 7)) * 0.12 * ratio : 0.2
-  swing(rig, 'LegL1', -1.2 + kick)
-  swing(rig, 'LegR1', -1.2 - kick)
-  sway(rig, 'LegL1', -0.42)
-  sway(rig, 'LegR1', 0.42)
-  swing(rig, 'LegL2', 1.05)
-  swing(rig, 'LegR2', 1.05)
+  const phase = motion.phase ?? time * (7 + ratio * 7)
+  const bob = Math.sin(phase * 2)
 
   if (!grounded) {
-    // Cheer on the way up, flap on the way down.
-    const up = jumpT < 0.5
-    const flap = Math.sin(time * 22) * 0.35
-    swing(rig, 'ArmL1', up ? -2.6 : -1.6 + flap)
-    swing(rig, 'ArmR1', up ? -2.6 : -1.6 - flap)
-    sway(rig, 'ArmL1', -0.35)
-    sway(rig, 'ArmR1', 0.35)
-    swing(rig, 'Spine1', -0.12)
+    // Airborne: knees tuck up on the way up, legs kick out and arms cheer at the top.
+    const up = jumpT < 0.35
+    const tuck = up ? 1 : 0.4
+    swing(rig, 'LegL1', -1.35 - tuck * 0.35)
+    swing(rig, 'LegR1', -1.35 - tuck * 0.35)
+    sway(rig, 'LegL1', -0.5 - (1 - tuck) * 0.25)
+    sway(rig, 'LegR1', 0.5 + (1 - tuck) * 0.25)
+    swing(rig, 'LegL2', 1.3 + tuck * 0.4)
+    swing(rig, 'LegR2', 1.3 + tuck * 0.4)
+    const wave = Math.sin(time * 18) * 0.25
+    swing(rig, 'ArmL1', up ? -2.7 : -2.1 + wave)
+    swing(rig, 'ArmR1', up ? -2.7 : -2.1 - wave)
+    sway(rig, 'ArmL1', -0.45)
+    sway(rig, 'ArmR1', 0.45)
+    swing(rig, 'ArmL2', 0.2)
+    swing(rig, 'ArmR2', 0.2)
+    swing(rig, 'Spine1', up ? 0.12 : -0.08)
     return
   }
-  if (ratio < 0.05) {
-    const idle = Math.sin(time * 1.7)
-    swing(rig, 'ArmL1', -0.55 + idle * 0.04)
-    swing(rig, 'ArmR1', -0.55 - idle * 0.04)
-    swing(rig, 'ArmL2', 0.5)
-    swing(rig, 'ArmR2', 0.5)
-    swing(rig, 'Spine1', idle * 0.02)
-    return
-  }
-  const phase = time * (7 + ratio * 7)
-  const c = Math.sin(phase)
-  swing(rig, 'ArmL1', -0.7 - c * 0.7 * ratio)
-  swing(rig, 'ArmR1', -0.7 + c * 0.7 * ratio)
-  swing(rig, 'ArmL2', 0.4)
-  swing(rig, 'ArmR2', 0.4)
-  sway(rig, 'Spine1', Math.sin(phase) * 0.08 * ratio)
-  swing(rig, 'Spine1', -0.1 * ratio)
+
+  // Seated in the saddle like a jockey: thighs forward around the duck's body, shins
+  // hanging down its sides, feet bobbing with the waddle.
+  // Thighs flat along the back and shins down inside the body (like riding in Fly
+  // Evolve): from outside you see one solid rider, never loose legs.
+  swing(rig, 'LegL1', -1.5)
+  swing(rig, 'LegR1', -1.5)
+  sway(rig, 'LegL1', -0.12)
+  sway(rig, 'LegR1', 0.12)
+  swing(rig, 'LegL2', 1.45)
+  swing(rig, 'LegR2', 1.45)
+  // Hands on the handle on the duck's neck; elbows soften with the bounce.
+  const grip = -1.05 - bob * 0.05 * ratio
+  swing(rig, 'ArmL1', grip)
+  swing(rig, 'ArmR1', grip)
+  sway(rig, 'ArmL1', -0.12)
+  sway(rig, 'ArmR1', 0.12)
+  swing(rig, 'ArmL2', 0.55 + bob * 0.06 * ratio)
+  swing(rig, 'ArmR2', 0.55 + bob * 0.06 * ratio)
+  // Lean into the run; a gentle breathing sway when idle.
+  swing(rig, 'Spine1', ratio > 0.05 ? 0.16 * ratio + bob * 0.03 : Math.sin(time * 1.7) * 0.02)
+  sway(rig, 'Spine1', Math.sin(phase) * 0.05 * ratio)
 }

@@ -7,11 +7,9 @@ import {
   DUCKS,
   PACKS,
   SPIN_EVERY_MS,
-  STAGE_NAMES,
   boostPrice,
   formatNum,
   formatTime,
-  friendBoost,
   packPrice,
   rebirthLevel,
   speedStat,
@@ -20,7 +18,7 @@ import {
 } from '../shared/gameData'
 import { packAmount } from '../shared/rules'
 import { runtime, serverNow, useGame } from '../state/store'
-import { DuckIcon, Gear, Gift, People, Rebirth, Sneaker, Trophy, WheelIcon } from './icons'
+import { DuckIcon, Gear, Gift, Rebirth, Sneaker, Trophy, WheelIcon } from './icons'
 import './hud.css'
 
 /** Re-render on a timer (for countdowns). */
@@ -44,20 +42,6 @@ function useUiScale() {
     window.addEventListener('resize', apply)
     return () => window.removeEventListener('resize', apply)
   }, [])
-}
-
-export function goalFor(p) {
-  if (!p) return 'Loading...'
-  if ((p.totalWins || 0) < 3) return 'Start by earning 3 wins!'
-  if (p.ducks.length < 2) return 'Buy the Shadow Duck for +2 per Step!'
-  if (p.maxStage < 3) return 'Reach Stage 3 - beat the tsunami!'
-  if (!p.treads.includes('t2')) return 'Buy the 2X Treadmill!'
-  if (p.maxStage < 5 && p.rebirths === 0) return 'Reach Stage 5!'
-  if (p.rebirths === 0) return p.level < rebirthLevel(0) ? `Reach Level ${rebirthLevel(0)} to Rebirth!` : 'Rebirth for x2 Steps!'
-  if (p.maxStage < 10) return 'Escape all 10 stages of World 1!'
-  if (p.rebirths < 3) return 'Rebirth 3 times to unlock World 2!'
-  if (p.maxStage < 20) return `Escape World 2! (Stage ${p.maxStage}/20)`
-  return 'Collect every duck & top the leaderboards!'
 }
 
 const MENU = [
@@ -128,8 +112,6 @@ function LeftSide({ profile }) {
 
 function TopRight({ profile, now }) {
   const { identity, isLoggedIn } = useBloxity()
-  const net = useGame((s) => s.net)
-  const friends = useGame((s) => s.friends)
   const pct = useGame((s) => s.speedPct)
   const statsAt = useGame((s) => s.statsAt)
   const setPanel = useGame((s) => s.setPanel)
@@ -142,7 +124,6 @@ function TopRight({ profile, now }) {
     play('click')
     send('boost', { kind })
   }
-  const netText = net === 'online' ? `Online • ${friends} in server` : net === 'offline' ? 'Offline • solo play' : net === 'error' ? 'Disconnected' : 'Connecting…'
   return (
     <div className="corner tr">
       <div className="idcard">
@@ -155,10 +136,6 @@ function TopRight({ profile, now }) {
           </div>
         </div>
       </div>
-      <div className="net">
-        <i className={net === 'online' ? 'dot-on' : net === 'offline' ? 'dot-off' : 'dot-wait'} />
-        {netText}
-      </div>
       <div className="pct">
         <button type="button" disabled={pct <= 10} aria-label="Decrease speed (-)" aria-keyshortcuts="-" title="Decrease speed - keyboard -" onClick={() => useGame.setState({ speedPct: Math.max(10, pct - 10) })}>
           <kbd className="shortcut" aria-hidden="true">-</kbd><span className="speed-symbol" aria-hidden="true">−</span>
@@ -169,13 +146,13 @@ function TopRight({ profile, now }) {
         </button>
       </div>
       <div className="stat ol">Speed: {formatNum(Math.round(speedStat(profile?.level || 1) * (pct / 100)))}</div>
-      <div className="spin" style={{ pointerEvents: 'auto', cursor: 'pointer' }} onClick={() => setPanel('wheel')}>
+      <button type="button" className="spin" aria-label="Open Lucky Wheel" onClick={() => setPanel('wheel')}>
         <div>
           <div className="t gold">Free Spin In: {formatTime(spinLeft)}</div>
           <div className="t gold">Spins: {profile?.spins || 0}</div>
         </div>
         <WheelIcon size={64} />
-      </div>
+      </button>
       {[
         ['wins', '2x WINS', profile?.boostWins],
         ['speed', '2x SPEED', profile?.boostSpeed],
@@ -206,37 +183,18 @@ function TopRight({ profile, now }) {
   )
 }
 
-function TopCenter({ profile }) {
+function TopCenter() {
   const race = useGame((s) => s.race)
-  const feed = useGame((s) => s.feed)
-  const region = useGame((s) => s.region)
   const left = Math.max(0, race.until - serverNow())
   const label = race.phase === 'wait' ? 'Next Race In' : race.phase === 'countdown' ? 'Race Starting In' : 'Race Ends In'
   const secs = Math.ceil(left / 1000)
   useEffect(() => {
     if (race.phase === 'countdown' && secs > 0 && secs <= 5) play('countdown')
   }, [race.phase, secs])
-  const goal = goalFor(profile)
   return (
     <div className="corner tc">
-      <div className="race ol">
-        {label}: {secs}
-      </div>
-      <div key={goal} className="goal">
-        <span className="goal-caption">YOUR NEXT GOAL</span>
-        <span className="goal-text">{goal}</span>
-      </div>
-      {region.stage > 0 && (
-        <div className="race ol" style={{ fontSize: 22, color: '#ffe14a' }}>
-          Stage {region.stage} • {STAGE_NAMES[region.stage]}
-        </div>
-      )}
-      <div className="feed">
-        {feed.map((f) => (
-          <div key={f.id} className={`ol ${f.kind}`}>
-            {f.text}
-          </div>
-        ))}
+      <div className={`race-timer ${race.phase === 'countdown' ? 'race-timer-starting' : ''}`} role="timer">
+        {label}: <strong>{secs}</strong> {secs === 1 ? 'second' : 'seconds'}
       </div>
     </div>
   )
@@ -244,7 +202,6 @@ function TopCenter({ profile }) {
 
 function Bottom({ profile }) {
   const prompt = useGame((s) => s.prompt)
-  const friends = useGame((s) => s.friends)
   const level = profile?.level || 1
   const xp = profile?.xp || 0
   const need = xpForLevel(level)
@@ -263,7 +220,6 @@ function Bottom({ profile }) {
         </button>
       )}
       <div className="lvrow">
-        <div className="lv-spacer" aria-hidden="true" />
         <div className="lvbar">
           <div className="fill" style={{ width: `${k * 100}%` }} />
           <div className="walkers" style={{ left: `${Math.max(12, k * 100)}%` }}>
@@ -285,10 +241,6 @@ function Bottom({ profile }) {
             <span className="gold">{mult}X</span>
             <Rebirth size={44} />
           </div>
-        </div>
-        <div className="friend ol">
-          <People size={44} />
-          Friend Boost: {Math.round(friendBoost(friends - 1) * 100)}%
         </div>
       </div>
       <div className="packs">
@@ -352,7 +304,7 @@ export function HUD() {
   const profile = useGame((s) => s.profile)
   return (
     <div className="hud">
-      <TopCenter profile={profile} />
+      <TopCenter />
       <LeftSide profile={profile} />
       <TopRight profile={profile} now={now} />
       <Bottom profile={profile} />
