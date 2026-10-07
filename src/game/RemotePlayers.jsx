@@ -3,7 +3,7 @@ import { memo, useEffect, useMemo, useRef } from 'react'
 import { CanvasTexture, LinearFilter, SpriteMaterial, SRGBColorSpace } from 'three'
 
 import { formatNum } from '../shared/gameData'
-import { runtime, useGame } from '../state/store'
+import { runtime, serverNow, useGame } from '../state/store'
 import { footprintPool, FootprintTrail } from './footprints'
 import Rider, { newMotion } from './Rider'
 import { FONT_UI } from './textures'
@@ -35,8 +35,11 @@ function tagMaterial(name, level, wins, rebirths) {
   return new SpriteMaterial({ map: t, transparent: true, depthWrite: false })
 }
 
-/** How far in the past remote players are drawn - a few snapshots of slack for jitter. */
-const INTERP_MS = 160
+/**
+ * How far in the past remote players are drawn (sender clock): one send interval + one
+ * server tick + network jitter, so there is almost always a snapshot on each side.
+ */
+const INTERP_MS = 200
 
 const RemoteRider = memo(function RemoteRider({ sid, player }) {
   const group = useRef()
@@ -52,34 +55,57 @@ const RemoteRider = memo(function RemoteRider({ sid, player }) {
     if (!r || !group.current) return
     // Snapshot interpolation: draw them INTERP_MS in the past, between two snapshots.
     const buf = r.buf
-    const renderT = performance.now() - INTERP_MS
+    const renderT = serverNow() - INTERP_MS
     while (buf.length > 2 && buf[1].t <= renderT) buf.shift()
     const a = buf[0]
     const b = buf[1] || a
     const far = Math.hypot(a.x - r.x, a.z - r.z) > 25
     let vx = 0
     let vz = 0
-    if (b !== a && renderT > a.t) {
+    let tx = a.x
+    let ty = a.y
+    let tz = a.z
+    r.tyaw = a.yaw
+    r.flags = a.flags
+    if (b !== a && renderT > a.t && renderT <= b.t) {
+      // Normal case: between two snapshots.
       const span = Math.max(1, b.t - a.t)
-      const f = Math.min(1, (renderT - a.t) / span)
-      r.x = a.x + (b.x - a.x) * f
-      r.y = a.y + (b.y - a.y) * f
-      r.z = a.z + (b.z - a.z) * f
+      const f = (renderT - a.t) / span
+      tx = a.x + (b.x - a.x) * f
+      ty = a.y + (b.y - a.y) * f
+      tz = a.z + (b.z - a.z) * f
       let dy = b.yaw - a.yaw
       dy = Math.atan2(Math.sin(dy), Math.cos(dy))
       r.tyaw = a.yaw + dy * f
       r.flags = f < 0.5 ? a.flags : b.flags
-      if (f < 1) {
-        vx = ((b.x - a.x) / span) * 1000
-        vz = ((b.z - a.z) / span) * 1000
-      }
-    } else {
-      r.x = a.x
-      r.y = a.y
-      r.z = a.z
-      r.tyaw = a.yaw
-      r.flags = a.flags
+      vx = ((b.x - a.x) / span) * 1000
+      vz = ((b.z - a.z) / span) * 1000
+    } else if (buf.length >= 2 && renderT > b.t) {
+      // A late packet: keep them gliding the way they were going for a moment.
+      const p0 = buf[buf.length - 2]
+      const p1 = buf[buf.length - 1]
+      const span = Math.max(1, p1.t - p0.t)
+      const ahead = Math.min(250, renderT - p1.t)
+      vx = ((p1.x - p0.x) / span) * 1000
+      vz = ((p1.z - p0.z) / span) * 1000
+      tx = p1.x + vx * (ahead / 1000)
+      ty = p1.y
+      tz = p1.z + vz * (ahead / 1000)
+      r.tyaw = p1.yaw
+      r.flags = p1.flags
+      if (ahead >= 250) vx = vz = 0
+    } else if (b !== a) {
+      tx = b.x
+      ty = b.y
+      tz = b.z
+      r.tyaw = b.yaw
+      r.flags = b.flags
     }
+    // Ease onto the target: hides the small correction when a late packet lands.
+    const ease = far ? 1 : 1 - Math.exp(-dt * 22)
+    r.x += (tx - r.x) * ease
+    r.y += (ty - r.y) * ease
+    r.z += (tz - r.z) * ease
     // Facing turns smoothly on top of that.
     let d = r.tyaw - r.yaw
     d = Math.atan2(Math.sin(d), Math.cos(d))

@@ -86,7 +86,9 @@ export function CameraRig() {
     const dt = Math.min(dtRaw, 0.05)
     if (runtime.turn) orbit.current.yaw -= runtime.turn * dt
     const { yaw, pitch, dist } = orbit.current
-    _target.set(me.x, me.y + LOOK_H, me.z)
+    // Follow the smoothly drawn position (between physics steps), not the raw one.
+    const v = runtime.view || me
+    _target.set(v.x, v.y + LOOK_H, v.z)
     // Pull the camera in front of any wall between it and the duck.
     const dx = Math.sin(yaw) * Math.cos(pitch)
     const dy = Math.sin(pitch)
