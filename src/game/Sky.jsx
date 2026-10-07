@@ -23,7 +23,7 @@ import { runtime, useGame } from '../state/store'
  */
 
 export const SKIES = {
-  day: { top: '#2463f2', mid: '#5aa8ff', bottom: '#d4edff', fog: '#c6e5ff', hemiSky: '#eef6ff', hemiGround: '#5e7d3a', sun: 3.1, hemi: 1.0, stars: 0, rainbow: 1, cloud: '#ffffff' },
+  day: { top: '#1652f0', mid: '#3f93ff', bottom: '#b4dcff', fog: '#a9d4ff', hemiSky: '#dcecff', hemiGround: '#4a6a2a', sun: 2.5, hemi: 0.8, stars: 0, rainbow: 1, cloud: '#ffffff' },
   ember: { top: '#240812', mid: '#7a2416', bottom: '#ff8a3a', fog: '#a8482a', hemiSky: '#ffb08a', hemiGround: '#3a1410', sun: 1.8, hemi: 0.9, stars: 0.2, rainbow: 0, cloud: '#ff9a6a' },
   high: { top: '#2b78ff', mid: '#86c4ff', bottom: '#ffffff', fog: '#d6ebff', hemiSky: '#ffffff', hemiGround: '#9fc6ff', sun: 2.6, hemi: 1.25, stars: 0, rainbow: 1, cloud: '#ffffff' },
   dusk: { top: '#0e0820', mid: '#2e1636', bottom: '#5a2234', fog: '#22101e', hemiSky: '#8a4a6a', hemiGround: '#1a0a14', sun: 1.1, hemi: 0.75, stars: 0.6, rainbow: 0, cloud: '#4a2a4a' },
@@ -216,7 +216,7 @@ export function Lights({ shadows }) {
   return (
     <>
       <hemisphereLight ref={hemi} args={['#d6ecff', '#4a8a3a', 1.1]} />
-      <ambientLight intensity={0.25} />
+      <ambientLight intensity={0.12} />
       <directionalLight
         ref={sun}
         intensity={2.6}
