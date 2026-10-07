@@ -35,7 +35,10 @@ function useNow(ms = 250) {
 function useUiScale() {
   useEffect(() => {
     const apply = () => {
-      const s = Math.max(0.48, Math.min(1.1, Math.min(window.innerWidth / 1750, window.innerHeight / 1000)))
+      // Very short screens (phones in landscape) may shrink further so the side
+      // columns leave room for the touch joystick and JUMP button.
+      const floor = window.innerHeight < 380 ? 0.38 : 0.48
+      const s = Math.max(floor, Math.min(1.1, Math.min(window.innerWidth / 1750, window.innerHeight / 1000)))
       document.documentElement.style.setProperty('--ui', s.toFixed(3))
     }
     apply()

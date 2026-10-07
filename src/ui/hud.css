@@ -1027,15 +1027,21 @@
   pointer-events: auto;
   touch-action: none;
 }
+.joy {
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.2) 70%, rgba(255, 255, 255, 0.28) 100%);
+  box-shadow: 0 4px 14px rgba(10, 25, 46, 0.25);
+}
 .joy .knob {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 64px;
-  height: 64px;
-  margin: -32px 0 0 -32px;
+  width: 44%;
+  height: 44%;
+  transform-origin: center;
+  translate: -50% -50%;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.7);
+  background: radial-gradient(circle at 35% 30%, #ffffff, rgba(220, 236, 255, 0.85));
+  box-shadow: 0 3px 8px rgba(10, 25, 46, 0.35);
 }
 .tbtn {
   position: absolute;
@@ -1217,5 +1223,43 @@
   .sbtn, .pack, .rbtn, .prompt, .gbtn, .toggle, .panel, .shade, .panel .close, .race-timer-starting strong {
     transition: none;
     animation: none;
+  }
+}
+
+/* ---- Phones in landscape: keep the touch controls clear of the HUD ----------
+   The HUD shrinks with --ui on small screens; the touch controls must too, and they
+   move into the free corners: the joystick sits just right of the left menu column,
+   JUMP (and E) in the bottom-right corner under the boost buttons. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
+  .joy {
+    left: calc(env(safe-area-inset-left, 0px) + 26px + 150px * var(--ui));
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+    width: clamp(88px, 28vh, 140px);
+    height: clamp(88px, 28vh, 140px);
+  }
+  .tbtn {
+    right: calc(env(safe-area-inset-right, 0px) + 16px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+    width: clamp(68px, 22vh, 96px);
+    height: clamp(68px, 22vh, 96px);
+    font-size: clamp(14px, 4.5vh, 20px);
+  }
+  .tbtn.e {
+    right: calc(env(safe-area-inset-right, 0px) + 28px + clamp(68px, 22vh, 96px));
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+    width: clamp(52px, 16vh, 72px);
+    height: clamp(52px, 16vh, 72px);
+    font-size: clamp(18px, 6vh, 26px);
+  }
+}
+/* Very short phones: a smaller JUMP so it clears the boost labels above it. */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 380px) {
+  .tbtn {
+    width: 64px;
+    height: 64px;
+    font-size: 15px;
+  }
+  .tbtn.e {
+    right: calc(env(safe-area-inset-right, 0px) + 92px);
   }
 }
