@@ -234,17 +234,48 @@ export const shapeTexture = (shape) =>
       g.arc(0, 0, 44, 0, Math.PI * 2)
       g.stroke()
     } else if (shape === 'sneaker') {
-      g.fillStyle = '#ff3a4a'
-      roundRect(g, -50, -10, 96, 34, 14)
+      // Chunky running shoe: red upper with a highlight, white sole, laces, side stripe, toe cap.
+      const grd = g.createLinearGradient(0, -50, 0, 30)
+      grd.addColorStop(0, '#ff6a78')
+      grd.addColorStop(1, '#e0182c')
+      g.lineJoin = 'round'
+      g.strokeStyle = '#2a0710'
+      g.lineWidth = 7
+      g.beginPath()
+      g.moveTo(-56, 22)
+      g.lineTo(-56, -6)
+      g.quadraticCurveTo(-56, -44, -22, -44)
+      g.lineTo(-8, -44)
+      g.quadraticCurveTo(-2, -16, 22, -8)
+      g.quadraticCurveTo(56, -2, 58, 22)
+      g.closePath()
+      g.fillStyle = grd
       g.fill()
+      g.stroke()
       g.fillStyle = '#ffffff'
-      roundRect(g, -52, 14, 100, 14, 6)
+      roundRect(g, -60, 18, 122, 20, 9)
       g.fill()
-      g.fillStyle = '#ff3a4a'
-      roundRect(g, -40, -36, 40, 40, 12)
+      g.stroke()
+      g.fillStyle = '#ffd84a'
+      g.beginPath()
+      g.moveTo(-36, 4)
+      g.quadraticCurveTo(-4, -2, 36, 14)
+      g.lineTo(32, 4)
+      g.quadraticCurveTo(-4, -12, -36, -6)
+      g.closePath()
       g.fill()
-      g.fillStyle = '#ffffff'
-      for (let i = 0; i < 3; i += 1) g.fillRect(-34 + i * 11, -26, 6, 18)
+      g.fillStyle = 'rgba(255,255,255,0.55)'
+      roundRect(g, -46, -34, 22, 8, 4)
+      g.fill()
+      g.strokeStyle = '#ffffff'
+      g.lineWidth = 6
+      g.lineCap = 'round'
+      for (let k = 0; k < 3; k += 1) {
+        g.beginPath()
+        g.moveTo(-22 + k * 9, -36 + k * 3)
+        g.lineTo(-10 + k * 9, -26 + k * 3)
+        g.stroke()
+      }
     } else {
       const grd = g.createRadialGradient(0, 0, 0, 0, 0, 60)
       grd.addColorStop(0, 'rgba(255,255,255,1)')

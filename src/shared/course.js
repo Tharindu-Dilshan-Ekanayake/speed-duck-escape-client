@@ -246,7 +246,7 @@ function createStage(n, world, cx, z0, len, opt = {}) {
   /** Low-poly canyon walls + trees just outside the course. */
   a.cliffs = ({ from = 0, to = len, gap = 4, base = -2, height = 1, trees = true, step = 9 } = {}) => {
     for (const s of [-1, 1]) {
-      for (let u = from; u < to; u += step * (0.7 + r() * 0.5)) {
+      for (let u = Math.max(from, 34); u < to; u += step * (0.7 + r() * 0.5)) {
         const sc = (7 + r() * 6) * height
         const x = s * (half + gap + sc * 0.55 + r() * 4)
         S.rocks.push({ x: X(x), y: base + sc * 0.3, z: Z(u), s: sc, ry: r() * 6.28, v: Math.floor(r() * 3) })
@@ -949,7 +949,7 @@ function createLobby(world) {
     ring.push([-72 - r() * 6, z])
     ring.push([72 + r() * 6, z])
   }
-  for (let x = -70; x <= 70; x += 12) if (Math.abs(x) > 14) ring.push([x, COURSE_Z - 10 - r() * 6])
+  for (let x = -70; x <= 70; x += 12) if (Math.abs(x) > 14) ring.push([x, COURSE_Z - 26 - r() * 6])
   for (const [x, z] of ring) {
     // Keep the ridge behind the stage wall low so it cannot cover the treadmill row.
     const backdrop = z < COURSE_Z - 5
