@@ -62,6 +62,7 @@ const LobbyRegion = memo(function LobbyRegion({ world }) {
       <StaticChunk boxes={L.boxes} castShadow={shadows} />
       <Nature rocks={L.rocks} trees={L.trees} flowers={L.flowers} theme={L.theme} />
       <Signs signs={L.signs} />
+      <Props props={L.props} />
     </Region>
   )
 })

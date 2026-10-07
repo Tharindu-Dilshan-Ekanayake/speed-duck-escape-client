@@ -5,6 +5,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 
 import { useGame } from '../state/store'
 import CameraRig from './CameraRig'
+import Ambient from './fx/Ambient'
 import Bursts from './fx/Bursts'
 import Popups from './fx/Popups'
 import LocalPlayer from './LocalPlayer'
@@ -75,6 +76,7 @@ export function GameScene() {
       <RemotePlayers />
       <Popups />
       <Bursts />
+      <Ambient />
       <CameraRig />
       <Ticker />
     </Canvas>

@@ -5,6 +5,7 @@ import {
   BoxGeometry,
   Color,
   ConeGeometry,
+  MeshBasicMaterial,
   CylinderGeometry,
   DoubleSide,
   MeshStandardMaterial,
@@ -14,7 +15,7 @@ import {
 } from 'three'
 
 import Duck from '../Duck'
-import { additiveMaterial, surfaceMaterial } from '../materials'
+import { additiveMaterial, liquidMaterial, surfaceMaterial } from '../materials'
 import { Label } from './Signs'
 
 const BOX = new BoxGeometry(1, 1, 1)
@@ -259,13 +260,127 @@ function Teleporter({ p }) {
   )
 }
 
+/* ---- Lobby decorations ---------------------------------------------------- */
+
+const LAMP_GLOW = new MeshBasicMaterial({ color: '#fff3b0', toneMapped: false })
+const LAMP_POST = std('#3a3f58', { roughness: 0.5, metalness: 0.4 })
+const GREENS = ['#2fae3a', '#46d14f', '#1f9a4a']
+const bushMats = GREENS.map((c) => std(c, { flatShading: true, roughness: 0.85 }))
+const flowerMats = ['#ff5ad8', '#ffe14a', '#ffffff'].map((c) => std(c, { emissive: c, emissiveIntensity: 0.3 }))
+const WATER_DISC = new CylinderGeometry(1, 1, 0.12, 48)
+const RAINBOW = ['#ff3a3a', '#ff8a1a', '#ffe11a', '#3dff5a', '#29c8ff', '#6b6bff', '#c23dff']
+
+function Lamp({ p }) {
+  const halo = useRef()
+  useFrame(({ clock }) => {
+    if (halo.current) halo.current.scale.setScalar(0.95 + Math.sin(clock.elapsedTime * 2 + p.x) * 0.08)
+  })
+  return (
+    <group position={[p.x, p.y, p.z]}>
+      <mesh geometry={CYL} material={LAMP_POST} position={[0, 0.25, 0]} scale={[0.55, 0.5, 0.55]} />
+      <mesh geometry={CYL} material={LAMP_POST} position={[0, 2.2, 0]} scale={[0.14, 4, 0.14]} castShadow />
+      <mesh geometry={SPHERE} material={LAMP_GLOW} position={[0, 4.5, 0]} scale={0.38} />
+      <mesh ref={halo} geometry={SPHERE} material={additiveMaterial('#ffd86a', 0.14)} position={[0, 4.5, 0]} scale={0.95} />
+      <mesh geometry={CONE} material={LAMP_POST} position={[0, 4.95, 0]} scale={[0.5, 0.35, 0.5]} />
+    </group>
+  )
+}
+
+function Bush({ p }) {
+  const s = p.s || 1
+  return (
+    <group position={[p.x, p.y, p.z]} scale={s}>
+      <mesh geometry={SPHERE} material={bushMats[p.c % 3]} position={[0, 0.5, 0]} scale={[0.9, 0.62, 0.85]} castShadow />
+      <mesh geometry={SPHERE} material={bushMats[(p.c + 1) % 3]} position={[0.6, 0.38, 0.2]} scale={[0.55, 0.45, 0.5]} castShadow />
+      <mesh geometry={SPHERE} material={bushMats[(p.c + 2) % 3]} position={[-0.55, 0.36, -0.1]} scale={[0.5, 0.42, 0.5]} castShadow />
+      {[
+        [0.2, 1.0, 0.45],
+        [-0.4, 0.85, 0.5],
+        [0.7, 0.75, 0.35],
+        [-0.1, 1.05, -0.3],
+      ].map(([x, y, z], i) => (
+        <mesh key={i} geometry={SPHERE} material={flowerMats[(i + p.c) % 3]} position={[x, y, z]} scale={0.1} />
+      ))}
+    </group>
+  )
+}
+
+function WelcomeArch({ p }) {
+  return (
+    <group position={[p.x, p.y, p.z]}>
+      {[-1, 1].map((sd) => (
+        <group key={sd} position={[sd * 5.6, 0, 0]}>
+          <mesh geometry={BOX} material={std('#4a4f6e', { roughness: 0.8 })} position={[0, 4.6, 0]} scale={[1.5, 9.2, 1.5]} castShadow />
+          <mesh geometry={BOX} material={goldMat} position={[0, 0.35, 0]} scale={[2.1, 0.7, 2.1]} />
+          <mesh geometry={BOX} material={goldMat} position={[0, 9.3, 0]} scale={[2.1, 0.6, 2.1]} />
+        </group>
+      ))}
+      {RAINBOW.map((c, i) => (
+        <mesh key={c} position={[0, 9.4, 0]}>
+          <torusGeometry args={[5.1 - i * 0.34, 0.2, 8, 48, Math.PI]} />
+          <meshBasicMaterial color={c} toneMapped={false} />
+        </mesh>
+      ))}
+      <Label text="+1 Speed Duck Escape" style="stage" height={1.5} position={[0, 12.8, 0.1]} px={140} />
+      <Label text="Waddle faster. Win bigger!" style="gold" height={0.7} position={[0, 11.1, 0.1]} />
+    </group>
+  )
+}
+
+function Bob({ children, r, speed, phase, y = 0.2 }) {
+  const ref = useRef()
+  useFrame(({ clock }) => {
+    if (!ref.current) return
+    const t = clock.elapsedTime * speed + phase
+    ref.current.position.set(Math.cos(t) * r, y + Math.sin(clock.elapsedTime * 2 + phase) * 0.05, Math.sin(t) * r)
+    ref.current.rotation.y = -t
+  })
+  return <group ref={ref}>{children}</group>
+}
+
+function Pond({ p }) {
+  const water = useMemo(() => liquidMaterial('water'), [])
+  const stones = useMemo(() => Array.from({ length: 16 }, (_, i) => [Math.cos((i / 16) * 6.28) * (p.r + 0.4), Math.sin((i / 16) * 6.28) * (p.r + 0.4), 0.7 + ((i * 37) % 10) / 20]), [p.r])
+  return (
+    <group position={[p.x, p.y, p.z]}>
+      <mesh geometry={WATER_DISC} material={water} position={[0, 0.07, 0]} scale={[p.r, 1, p.r]} />
+      {stones.map(([x, z, s], i) => (
+        <mesh key={i} geometry={SPHERE} material={stoneMat} position={[x, 0.2, z]} scale={[s, s * 0.5, s]} castShadow />
+      ))}
+      {[0, 1, 2, 3, 4].map((i) => {
+        const a = i * 1.3 + 0.4
+        return (
+          <group key={i} position={[Math.cos(a) * p.r * 0.62, 0.15, Math.sin(a) * p.r * 0.62]}>
+            <mesh geometry={DISC} material={bushMats[0]} scale={0.8} />
+            <mesh geometry={SPHERE} material={flowerMats[i % 3]} position={[0.1, 0.12, 0]} scale={[0.16, 0.1, 0.16]} />
+          </group>
+        )
+      })}
+      {[0, 1, 2].map((i) => (
+        <Bob key={i} r={p.r * (0.3 + i * 0.16)} speed={0.25 + i * 0.07} phase={i * 2.1} y={0.1}>
+          <group scale={0.3}>
+            <Duck id={['rubber', 'love', 'frost'][i]} particles={false} glow={false} />
+          </group>
+        </Bob>
+      ))}
+      <Label text="Duck Pond" style="gold" height={0.7} position={[0, 2.6, 0]} billboard />
+    </group>
+  )
+}
+
 export const Props = memo(function Props({ props }) {
   return props.map((p, i) => {
     switch (p.type) {
       case 'demon':
         return <Demon key={i} p={p} />
       case 'arch':
-        return <Arch key={i} p={p} />
+        return p.w ? <Arch key={i} p={p} /> : <WelcomeArch key={i} p={p} />
+      case 'lamp':
+        return <Lamp key={i} p={p} />
+      case 'bush':
+        return <Bush key={i} p={p} />
+      case 'pond':
+        return <Pond key={i} p={p} />
       case 'temple':
         return <Temple key={i} p={p} />
       case 'goldenDuck':

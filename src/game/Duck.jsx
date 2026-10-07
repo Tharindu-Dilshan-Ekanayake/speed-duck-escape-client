@@ -275,6 +275,9 @@ export const Duck = memo(function Duck({ id, motionRef, particles = true, glow =
   const ring = useRef()
   const aura = useRef()
   const bigWings = useRef()
+  const eyeL = useRef()
+  const eyeR = useRef()
+  const tail = useRef()
 
   useFrame((state, dt) => {
     const mo = motionRef?.current || IDLE
@@ -296,6 +299,12 @@ export const Duck = memo(function Duck({ id, motionRef, particles = true, glow =
     if (wingL.current) wingL.current.rotation.z = 0.2 + flap
     if (wingR.current) wingR.current.rotation.z = -0.2 - flap
     if (head.current) head.current.rotation.x = air ? -0.15 : Math.sin(phase * 2) * 0.04 * ratio
+    // Life: blink every few seconds and wag the tail.
+    const bt = (state.clock.elapsedTime + id.length * 0.9) % 3.7
+    const eyeY = bt > 3.56 ? 0.1 : 1
+    if (eyeL.current) eyeL.current.scale.set(0.085, 0.085 * eyeY, 0.085)
+    if (eyeR.current) eyeR.current.scale.set(0.085, 0.085 * eyeY, 0.085)
+    if (tail.current) tail.current.rotation.z = Math.sin(t * (air ? 18 : 5 + ratio * 8)) * (0.22 + ratio * 0.15)
     if (ring.current) ring.current.rotation.z += dt * 1.6
     if (aura.current) {
       aura.current.rotation.z -= dt * 0.35
@@ -325,7 +334,7 @@ export const Duck = memo(function Duck({ id, motionRef, particles = true, glow =
         {/* Body: tilted so the chest leads, with a tail flick at the back. */}
         <mesh geometry={LP} material={m.body} position={[0, 1.0, -0.08]} scale={[0.66, 0.56, 0.8]} rotation={[-0.32, 0, 0]} castShadow />
         <mesh geometry={LP} material={m.body} position={[0, 1.12, 0.3]} scale={[0.5, 0.52, 0.46]} castShadow />
-        <mesh geometry={CONE} material={m.body} position={[0, 1.3, -0.84]} rotation={[-1.15, 0, 0]} scale={[0.26, 0.6, 0.12]} castShadow />
+        <mesh ref={tail} geometry={CONE} material={m.body} position={[0, 1.3, -0.84]} rotation={[-1.15, 0, 0]} scale={[0.26, 0.6, 0.12]} castShadow />
         <mesh geometry={LP} material={m.belly} position={[0, 1.02, 0.62]} scale={[0.34, 0.34, 0.2]} />
         {glow && m.glow && <mesh geometry={LP} material={m.glow} position={[0, 1.1, 0.05]} scale={[0.95, 1.15, 1.0]} />}
         {/* Wings, folded against the sides. */}
@@ -356,13 +365,20 @@ export const Duck = memo(function Duck({ id, motionRef, particles = true, glow =
         <group ref={head} position={[0, 1.82, 0.46]}>
           <mesh geometry={LP} material={m.body} scale={0.42} castShadow />
           {glow && m.glow && <mesh geometry={LP} material={m.glow} scale={0.5} />}
+          {/* Head tuft + nostrils. */}
+          <mesh geometry={CONE} material={m.body} position={[0.02, 0.43, 0.0]} rotation={[0.55, 0, -0.2]} scale={[0.07, 0.24, 0.07]} />
+          <mesh geometry={CONE} material={m.body} position={[-0.05, 0.42, -0.04]} rotation={[0.8, 0, 0.35]} scale={[0.05, 0.17, 0.05]} />
+          {[1, -1].map((s) => (
+            <mesh key={s} geometry={SPHERE} material={m.black} position={[s * 0.07, 0.0, 0.64]} scale={0.022} />
+          ))}
           {/* Flat orange bill, upper + lower. */}
           <mesh geometry={LP} material={m.beak} position={[0, -0.06, 0.42]} scale={[0.26, 0.08, 0.3]} />
           <mesh geometry={LP} material={m.beak} position={[0, -0.13, 0.38]} scale={[0.21, 0.06, 0.22]} />
           {[1, -1].map((s) => (
             <group key={s}>
-              <mesh geometry={SPHERE} material={m.eye} position={[s * 0.2, 0.1, 0.33]} scale={0.085} />
+              <mesh ref={s === 1 ? eyeL : eyeR} geometry={SPHERE} material={m.eye} position={[s * 0.2, 0.1, 0.33]} scale={0.085} />
               <mesh geometry={SPHERE} material={m.shine} position={[s * 0.18, 0.14, 0.4]} scale={0.03} />
+              <mesh geometry={SPHERE} material={m.shine} position={[s * 0.225, 0.07, 0.4]} scale={0.016} />
               <mesh geometry={SPHERE} material={m.cheek} position={[s * 0.3, -0.06, 0.27]} scale={[0.07, 0.05, 0.03]} />
             </group>
           ))}

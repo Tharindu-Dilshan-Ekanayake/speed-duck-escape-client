@@ -34,8 +34,13 @@ const blackHole = new MeshStandardMaterial({ color: '#05030a', roughness: 0.2 })
 
 /* ---- Duck pedestals ------------------------------------------------------ */
 
+const BEAM = new CylinderGeometry(1.1, 1.5, 6, 20, 1, true)
 const Pedestal = memo(function Pedestal({ ped, owned, equipped, affordable, rebirthsOk }) {
   const d = DUCKS.find((x) => x.id === ped.id)
+  const spin = useRef()
+  useFrame(({ clock }) => {
+    if (spin.current) spin.current.rotation.y = (ped.ry || 0) + Math.sin(clock.elapsedTime * 0.6 + ped.x) * 0.6
+  })
   let top
   let style
   if (equipped) [top, style] = ['Equipped!', 'green']
@@ -45,7 +50,9 @@ const Pedestal = memo(function Pedestal({ ped, owned, equipped, affordable, rebi
   else [top, style] = [`${formatNum(d.cost)} Wins`, affordable ? 'gold' : 'red']
   return (
     <group position={[ped.x, ped.y, ped.z]}>
-      <group rotation={[0, ped.ry || 0, 0]} scale={1.45}>
+      <mesh geometry={CYL} material={surfaceMaterial('#ffcc1a', 'gold')} position={[0, 0.02, 0]} scale={[1.9, 0.12, 1.9]} />
+      <mesh geometry={BEAM} material={additiveMaterial(d.fx?.glow || d.body, 0.08)} position={[0, 3, 0]} />
+      <group ref={spin} scale={1.45}>
         <Duck id={d.id} />
       </group>
       <Label text={top} style={style} height={0.6} position={[0, 4.45, 0]} billboard />
