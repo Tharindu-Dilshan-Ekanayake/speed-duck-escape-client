@@ -2,17 +2,16 @@ import { useFrame } from '@react-three/fiber'
 import { memo, useEffect, useMemo, useRef } from 'react'
 import { CanvasTexture, LinearFilter, SpriteMaterial, SRGBColorSpace } from 'three'
 
-import { formatNum } from '../shared/gameData'
 import { runtime, serverNow, useGame } from '../state/store'
 import { footprintPool, FootprintTrail } from './footprints'
 import Rider, { newMotion } from './Rider'
 import { FONT_UI } from './textures'
 
-/** Name tag: name on top, level + wins underneath. */
-function tagMaterial(name, level, wins, rebirths) {
+/** Name tag: just the player's name. */
+function tagMaterial(name) {
   const c = document.createElement('canvas')
   c.width = 512
-  c.height = 160
+  c.height = 96
   const g = c.getContext('2d')
   g.textAlign = 'center'
   g.textBaseline = 'middle'
@@ -20,15 +19,9 @@ function tagMaterial(name, level, wins, rebirths) {
   g.font = `700 54px ${FONT_UI}`
   g.lineWidth = 10
   g.strokeStyle = 'rgba(10,12,24,0.9)'
-  g.strokeText(name, 256, 48)
+  g.strokeText(name, 256, 50)
   g.fillStyle = '#ffffff'
-  g.fillText(name, 256, 48)
-  g.font = `700 40px ${FONT_UI}`
-  const sub = `${rebirths ? `R${rebirths} • ` : ''}Lv ${level}  🏆 ${formatNum(wins)}`
-  g.lineWidth = 8
-  g.strokeText(sub, 256, 116)
-  g.fillStyle = '#ffd84a'
-  g.fillText(sub, 256, 116)
+  g.fillText(name, 256, 50)
   const t = new CanvasTexture(c)
   t.colorSpace = SRGBColorSpace
   t.minFilter = LinearFilter
@@ -47,7 +40,7 @@ const RemoteRider = memo(function RemoteRider({ sid, player }) {
   const footTrail = useMemo(() => new FootprintTrail(sid), [sid])
   useEffect(() => () => footprintPool.clearActor(sid), [sid])
   const prev = useRef({ grounded: true, x: 0, z: 0 })
-  const tag = useMemo(() => tagMaterial(player.name, player.level, player.wins, player.rebirths), [player.name, player.level, player.wins, player.rebirths])
+  const tag = useMemo(() => tagMaterial(player.name), [player.name])
 
   useFrame((_s, dtRaw) => {
     const dt = Math.min(dtRaw, 0.05)
@@ -143,7 +136,7 @@ const RemoteRider = memo(function RemoteRider({ sid, player }) {
   return (
     <group ref={group}>
       <Rider duck={player.duck || 'rubber'} equipped={player.avatar} proportions={player.proportions} motionRef={motion} />
-      <sprite material={tag} position={[0, 3.35, 0]} scale={[2.6, 0.81, 1]} />
+      <sprite material={tag} position={[0, 3.2, 0]} scale={[2.6, 0.49, 1]} />
     </group>
   )
 })

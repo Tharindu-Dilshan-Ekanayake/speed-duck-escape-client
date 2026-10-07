@@ -5,7 +5,6 @@ import { useBloxityStore } from './bloxity/store'
 import GameScene from './game/GameScene'
 import { connect, reconnectWithNewIdentity } from './net/net'
 import { runtime, useGame } from './state/store'
-import Guide from './ui/Guide'
 import HUD, { invite, PANEL_SHORTCUTS } from './ui/HUD'
 import LoadingScreen from './ui/LoadingScreen'
 import Panels from './ui/Panels'
@@ -107,7 +106,6 @@ function App() {
     <div className="relative h-screen w-screen overflow-hidden" style={{ background: '#56a6ff' }}>
       {fontsReady && <GameScene />}
       <HUD />
-      <Guide />
       <Panels />
       <TouchControls />
       <LoadingScreen />
